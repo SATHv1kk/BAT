@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="bat">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAT</title>
+  <style>
+    :root {
+      --primary: #d97757;
+      --primary-hover: #c45c3e;
+      --bg: #ffffff;
+      --surface: #ffffff;
+      --border: #e5e5e5;
+      --text: #1f1f1f;
+      --muted: #6b7280;
+      --input-bg: #f8f8f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0; padding: 0;
+      width: 100%; height: 100vh;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      padding: 12px 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #111111;
+      flex-shrink: 0;
+    }
+    .header h1 { 
+      margin: 0; 
+      font-size: 15px; 
+      font-weight: 600; 
+      letter-spacing: -.01em;
+    }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .btn-ghost {
+      background: none; border: 1px solid var(--border);
+      color: var(--muted); font-size: 12px;
+      padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-ghost:hover { background: #f5f5f5; }
+    .model-select {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+      max-width: 110px;
+    }
+    .model-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Settings panel */
+    .settings {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .settings[hidden] { display: none; }
+    .settings-label {
+      font-weight: 600; color: var(--muted);
+      font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+      margin-top: 4px;
+    }
+    .settings-row { display: flex; gap: 6px; align-items: center; }
+    .settings input, .settings textarea {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--bg);
+      color: var(--text);
+      resize: vertical;
+      outline: none;
+      min-width: 0;
+    }
+    .settings-status { font-size: 11px; color: var(--muted); }
+    .settings-status.ok { color: #16a34a; }
+
+    .message.assistant.streaming { opacity: 0.85; }
+
+    /* Chat area */
+    .chat {
+      flex: 1; overflow-y: auto;
+      padding: 20px 16px;
+      background: var(--bg);
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .message {
+      max-width: 85%; padding: 10px 14px;
+      border-radius: 16px;
+      line-height: 1.5; white-space: pre-wrap;
+      word-break: break-word; font-size: 14px;
+      position: relative;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: var(--primary);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .message.assistant {
+      align-self: flex-start;
+      background: #f1f1f1;
+      border: none;
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+    }
+    .message.system {
+      align-self: center;
+      background: #f4f4f4;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      max-width: 80%;
+      text-align: center;
+    }
+
+    /* Agent activity log — step feed */
+    .message.activity {
+      align-self: stretch;
+      max-width: 100%;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .message.activity.error { border-color: #fecaca; background: #fef2f2; }
+    .message.activity.success { border-color: #bbf7d0; background: #f0fdf4; }
+    .message.activity.warn { border-color: #fde68a; background: #fffbeb; }
+    .activity-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .activity-step {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #111; color: #fff;
+      font-size: 11px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .activity-phase {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .activity-title { font-weight: 600; color: var(--text); flex: 1; }
+    .activity-detail {
+      color: #4b5563;
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 4px;
+      padding-left: 30px;
+    }
+    .activity-detail.collapsed {
+      max-height: 4.5em;
+      overflow: hidden;
+      mask-image: linear-gradient(180deg, #000 60%, transparent);
+    }
+    .activity-expand {
+      margin-top: 4px; padding-left: 30px;
+      font-size: 11px; color: var(--muted);
+      background: none; border: none; cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .debug-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+      margin-top: 6px;
+    }
+    .debug-status {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    .debug-status.ok { color: #16a34a; }
+
+    /* Input area */
+    .input-area {
+      flex-shrink: 0;
+      padding: 12px 12px 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .input-wrapper {
+      display: flex;
+      align-items: flex-end;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 6px 8px 6px 16px;
+      min-height: 44px;
+    }
+    .input-area textarea {
+      flex: 1;
+      min-height: 20px;
+      max-height: 180px;
+      padding: 6px 0;
+      border: none;
+      background: transparent;
+      resize: none;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.4;
+      outline: none;
+      color: var(--text);
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-top: 4px;
+      gap: 8px;
+    }
+    .btn-send {
+      width: 32px;
+      height: 32px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.1s ease;
+    }
+    .btn-send:hover { background: var(--primary-hover); }
+    .btn-send:disabled { 
+      background: #d1d5db; 
+      cursor: not-allowed; 
+    }
+    .btn-stop {
+      padding: 6px 14px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-stop.visible {
+      display: inline-flex;
+    }
+    .btn-stop:hover {
+      background: #b91c1c;
+    }
+    .hint {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-right: auto;
+      padding-left: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-left">
+      <img class="header-logo" src="/bat-icon.svg" alt="" width="28" height="28">
+      <h1>BAT</h1>
+    </div>
+    <div class="header-right">
+      <select id="modelSelect" class="model-select" title="Choose model">
+        <option value="deepseek-v4-pro">V4 Pro</option>
+        <option value="deepseek-v4-flash">V4 Flash</option>
+        <option value="deepseek-chat">V3</option>
+      </select>
+      <button class="btn-ghost" id="settingsBtn" title="Settings">⚙</button>
+      <button class="btn-ghost" id="clearChatBtn" title="Clear conversation">Clear</button>
+    </div>
+  </div>
+
+  <div class="settings" id="settingsPanel" hidden>
+    <label class="settings-label" for="keyInput">DeepSeek API key</label>
+    <div class="settings-row">
+      <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off">
+      <button class="btn-ghost" id="saveKeyBtn">Save</button>
+    </div>
+    <div class="settings-status" id="keyStatus"></div>
+    <label class="settings-label" for="allowedSitesInput">Allowed sites for page actions</label>
+    <textarea id="allowedSitesInput" rows="3" placeholder="one domain per line, e.g. myLMS.com&#10;leave empty to allow all sites"></textarea>
+    <div class="settings-row">
+      <button class="btn-ghost" id="saveSitesBtn">Save sites</button>
+      <span class="settings-status" id="sitesStatus"></span>
+    </div>
+  </div>
+
+  <div class="chat" id="chat" role="log"></div>
+
+  <div class="input-area">
+    <div class="input-wrapper">
+      <textarea id="promptInput" placeholder="Message..." rows="1"></textarea>
+      <button class="btn-send" id="sendBtn" title="Send">↑</button>
+    </div>
+    <div class="input-row">
+      <button class="btn-stop" id="stopBtn" title="Stop">■ Stop</button>
+      <span class="hint" id="modelHint">Ask anything · Say "complete this course" to control page</span>
+    </div>
+    <div class="debug-bar">
+      <button class="btn-ghost" id="copyDebugBtn" title="Copy full debug log for troubleshooting">Copy debug log</button>
+      <span class="debug-status" id="debugStatus">Debug: 0 events</span>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

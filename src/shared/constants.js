@@ -1,0 +1,37 @@
+export const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions';
+export const DEFAULT_MODEL = 'deepseek-v4-pro';
+
+// Set your key through the side panel UI. Leave this empty — never commit a real key.
+// Get one at https://platform.deepseek.com/api_keys
+export const DEEPSEEK_DEFAULT_KEY = '';
+
+export const MODEL_OPTIONS = [
+  { id: 'deepseek-v4-pro', label: 'V4 Pro' },
+  { id: 'deepseek-v4-flash', label: 'V4 Flash' },
+  { id: 'deepseek-chat', label: 'V3' }
+];
+
+export const MAX_STUCK = 8;
+export const MAX_STEPS = 200;
+export const FOCUS_TREE_CHARS = 14000;
+export const FOCUS_QUIZ_TREE_CHARS = 12000;
+export const FOCUS_TEXT_CHARS = 5000;
+export const API_TIMEOUT_MS = 180000;
+export const RESUME_DIALOG_WAIT_MS = 4000;
+
+export const SUBMIT_CLICK_RE = /\b(check|submit|next|continue|finish|confirm)\b/i;
+export const QUIZ_FAIL_RE = /\b(incorrect|not correct|wrong answer|try again|please try again|that is not|you must select|not quite|failed the|unsuccessful)\b/i;
+export const QUIZ_PASS_RE = /\b(correct|well done|that'?s right|that is correct|you may continue|click next to continue|passed this|great job|nice work)\b/i;
+export const RESUME_DIALOG_RE = /\b(resume|restart)\b.*\b(where you left|previous session|continue where|pick up|left off)\b|\bwould you like to resume\b|\bresume\s*[–\-–]\s*restart\b/i;
+
+export const ACTIVITY_PHASES = {
+  info:    { title: 'Info' },
+  observe: { title: 'Observing page' },
+  think:   { title: 'Thinking' },
+  plan:    { title: 'Plan' },
+  act:     { title: 'Executing' },
+  result:  { title: 'Result' },
+  warn:    { title: 'Warning' },
+  error:   { title: 'Error' },
+  done:    { title: 'Done' }
+};
