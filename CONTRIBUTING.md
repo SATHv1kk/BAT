@@ -124,6 +124,21 @@ An empty `catch {}` is occasionally right (a cosmetic overlay failing on `chrome
 the default is `debugEntry('what_failed', { … })`. "Copy debug log" is this project's
 entire support story; an error that reaches nobody costs a user an unexplainable failure.
 
+Watch for the same mistake one layer down: `.catch(() => [])` (or any fallback that
+discards the caught value) silently reintroduces exactly this problem even in a function
+that otherwise does everything right. `getPageContent`'s own outer `catch` logged properly,
+but its inner `observe()` helper swallowed `chrome.scripting.executeScript`'s error via
+`.catch(() => [])` — so the single most common real failure (a site returning an error
+page, surfacing as "Frame with ID 0 is showing error page") never reached the model OR the
+debug log, and a run retried the same dead URL until its whole token budget was gone
+before anything stopped it. If you add a `.catch()`, ask what happens to the thing you
+caught — logging it at the outer boundary doesn't help if an inner one already threw it
+away. `lastObserveError` (a per-tab `Map`, in `sidepanel/app.js`) is the fix and the
+pattern: capture the reason, surface it to the model instead of a generic message, and
+count consecutive total-read-failures the same way `unchangedStreak` counts a stuck tree —
+a failure mode that never increments any counter can run until an unrelated budget catches
+it, which is a much worse failure than the one it was supposed to guard against.
+
 ## Layout
 
 `sidepanel/app.js` is still the largest file: it holds the chat UI, the agent loop, and

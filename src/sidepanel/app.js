@@ -6,6 +6,7 @@ import {
   DEEPSEEK_DEFAULT_KEY,
   MODEL_OPTIONS,
   MAX_STUCK,
+  MAX_UNREADABLE,
   MAX_STEPS,
   FOCUS_TREE_CHARS,
   FOCUS_QUIZ_TREE_CHARS,
@@ -63,6 +64,17 @@ let queuedMessages  = [];    // messages typed while the agent is running
 // Each iframe assigns ref_1, ref_2… independently; we renumber on merge so clicks hit the right frame.
 const tabRefRegistry = new Map();
 
+// Reason the last getPageContent() call for a tab failed entirely (a caught
+// exception, or executeScript coming back with nothing at all — which
+// includes cases like "Frame with ID 0 is showing error page", i.e. Chrome's
+// OWN error interstitial, not just a slow page). buildSnapshot surfaces this
+// to the model instead of the opaque "tab may be loading or protected" it
+// used to fall back to — that genericity is what let a run retry the same
+// dead URL for 20 steps and its entire token budget instead of recognizing
+// early that no amount of waiting would fix it. Cleared on the next
+// successful read.
+const lastObserveError = new Map();
+
 // Persistent per-tab numbering: the same (frameId, localRef) keeps the same
 // global ref across observations, so refs the model already knows stay valid
 // instead of silently pointing at a different element after each re-read.
@@ -97,6 +109,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabRefRegistry.delete(tabId);
   tabRefNumbering.delete(tabId);
   tabCourseMode.delete(tabId);
+  lastObserveError.delete(tabId);
 });
 
 // find returns frame-LOCAL refs — translate them into the global ref space the
@@ -869,7 +882,30 @@ function toolCallToAction(name, args) {
 // Snapshot after actions: full context on change, tiny note when nothing changed.
 async function buildSnapshot(state, { force = false, skipAutoScroll = false } = {}) {
   const pageData = await observePage(state.tabId, state.resumeClickStreak, false, skipAutoScroll);
-  if (!pageData) return 'Could not read the page (tab may be loading or protected).';
+  if (!pageData) {
+    state.unreadableStreak = (state.unreadableStreak || 0) + 1;
+    const reason = lastObserveError.get(state.tabId);
+    let msg = reason
+      ? `Could not read the page — ${reason}.\n`
+      : 'Could not read the page (tab may be loading or protected).\n';
+    // The reason this counter exists at all: a page that fails to read is NOT
+    // the same as an unchanged tree, and unchangedStreak never sees this case
+    // (it's only ever touched below, on a SUCCESSFUL read) — so without this,
+    // a dead URL (a site's own error/rate-limit page, not a BAT bug) could be
+    // retried until the run's entire token budget was gone, with no
+    // escalation ever firing. A specific reason plus early escalation is what
+    // turns that into "tell the user and move on" within a couple of steps.
+    if (state.unreadableStreak >= 3) {
+      msg += `escalation: the page has failed to read ${state.unreadableStreak}× in a row — this usually means `
+        + 'the site returned an error, rate-limit, or block page, not that it is merely slow. Stop retrying the '
+        + 'same URL: try go_back, a substantially different URL, or tell the user what happened and move on to '
+        + 'the next site/keyword.\n';
+    } else if (state.unreadableStreak >= 2) {
+      msg += 'escalation: failed to read twice in a row — try waiting once more or refresh before changing approach.\n';
+    }
+    return msg;
+  }
+  state.unreadableStreak = 0;
 
   let out = '';
   if (pageData.autoDismissed) {
@@ -1700,6 +1736,7 @@ async function runAgentLoop(userText) {
     tabId: tab?.id ?? null,
     lastFingerprint: '',
     unchangedStreak: 0,
+    unreadableStreak: 0,
     resumeClickStreak: 0,
     borderShown: false,
     pendingChildTabId: null,
@@ -1764,7 +1801,7 @@ async function runAgentLoop(userText) {
 
       // Route reasoning effort by difficulty: full effort for the opening plan
       // and for recovery (stuck page / failed action); medium for routine steps.
-      const effort = (step === 1 || state.unchangedStreak > 0 || state.lastActionFailed) ? 'high' : 'medium';
+      const effort = (step === 1 || state.unchangedStreak > 0 || state.unreadableStreak > 0 || state.lastActionFailed) ? 'high' : 'medium';
 
       let result;
       const liveBubble = addStreamingBubble();
@@ -1905,6 +1942,13 @@ async function runAgentLoop(userText) {
       if (state.unchangedStreak >= MAX_STUCK) {
         addActivity(step, 'warn', 'Stopping — page not responding to actions',
           'Send a new instruction or take over manually.', 'warn');
+        break;
+      }
+      if (state.unreadableStreak >= MAX_UNREADABLE) {
+        addActivity(step, 'warn', 'Stopping — page has failed to load repeatedly',
+          `${state.unreadableStreak} consecutive failed reads` + (lastObserveError.get(state.tabId) ? ` (${lastObserveError.get(state.tabId)})` : '')
+            + ' — likely an error/rate-limit page from the site, not something waiting fixes. Send a new instruction to try a different site or URL.',
+          'warn');
         break;
       }
     }
@@ -2519,16 +2563,28 @@ async function getPageContent(tabId) {
     if (BT?.waitForDomQuiet) await BT.waitForDomQuiet(tabId, { quietMs: 200, maxMs: 600 });
 
     const courseMode = tabCourseMode.get(tabId) === true;
+    // Capture the REASON, not just fall back to []. executeScript throws a
+    // specific, useful message for the single most common real-world failure
+    // here — "Frame with ID 0 is showing error page" when the site returned
+    // an error/rate-limit/interstitial instead of a real page — and that used
+    // to be discarded outright, leaving both the model and the debug log with
+    // nothing to distinguish "still loading" from "this URL is a dead end."
+    let observeError = null;
     const observe = () => chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
       injectImmediately: true,
       world: 'ISOLATED',
       func: OBSERVE_FUNC,
       args: [courseMode]
-    }).catch(() => []);
+    }).catch((e) => { observeError = e?.message || String(e); return []; });
 
     let results = await observe();
-    if (!results?.length) return null;
+    if (!results?.length) {
+      const reason = observeError || 'executeScript returned no frames (tab may be mid-navigation or on a restricted page)';
+      lastObserveError.set(tabId, reason);
+      debugEntry('observe_failed', { tabId, error: reason, phase: 'initial' });
+      return null;
+    }
 
     // Frames created after page load miss the declared content script — inject
     // it only where the observer reported it absent, then re-observe once.
@@ -2539,11 +2595,22 @@ async function getPageContent(tabId) {
       await injectTreeScript(tabId, missing);
       await delay(250);
       results = await observe();
+      if (!results?.length) {
+        const reason = observeError || 'executeScript returned no frames on retry';
+        lastObserveError.set(tabId, reason);
+        debugEntry('observe_failed', { tabId, error: reason, phase: 'retry' });
+        return null;
+      }
     }
 
     const frames = (results || []).filter(r => r.result);
     const main = frames.find(r => !r.result.isFrame) || frames[0];
-    if (!main) return null;
+    if (!main) {
+      lastObserveError.set(tabId, 'no main-frame result (every frame reported isFrame:true)');
+      debugEntry('observe_failed', { tabId, error: 'no main frame', phase: 'no-main' });
+      return null;
+    }
+    lastObserveError.delete(tabId);
 
     const { registry, accessibilityTree } = mergeTreeResults(
       frames.map(r => ({
@@ -2589,7 +2656,9 @@ async function getPageContent(tabId) {
     // Returning bare null for any of a dozen distinct failures made the single
     // most common "the agent can't see the page" complaint undiagnosable — and
     // "Copy debug log" is this project's entire support story.
-    debugEntry('observe_failed', { tabId, error: e?.message || String(e) });
+    const reason = e?.message || String(e);
+    lastObserveError.set(tabId, reason);
+    debugEntry('observe_failed', { tabId, error: reason, phase: 'exception' });
     return null;
   }
 }

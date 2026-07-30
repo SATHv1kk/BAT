@@ -12,6 +12,14 @@ export const MODEL_OPTIONS = [
 ];
 
 export const MAX_STUCK = 8;
+// A page that fails to read at all (executeScript errors, a Chrome error
+// interstitial) is a stronger, faster dead-end signal than an unchanged tree
+// — the latter can legitimately repeat during a slow multi-step form flow,
+// the former means there is no page there to act on. Lower than MAX_STUCK on
+// purpose: this used to have no ceiling at all, and a single bad URL could
+// burn a run's entire token budget in a blind retry loop before anything
+// stopped it.
+export const MAX_UNREADABLE = 6;
 export const MAX_STEPS = 200;
 
 // DeepSeek's chat API does not accept image input — the whole screenshot path
