@@ -66,7 +66,7 @@ DOM reader, refusing:
 | Credential surfaces | `document.cookie`, `localStorage`, `sessionStorage`, `indexedDB`, `caches`, `navigator.credentials` |
 | Dynamic code | `eval` (including `window.eval`), `Function(...)` (with or without `new`), `import()`, `importScripts` |
 | Prototype-chain / receiver escapes | `.constructor` (the standard non-keyword route to `Function`), bare `this` (a function built this way and called with no receiver runs with `this` bound to the global object) |
-| Dynamic global access | bracket/computed access on `window`/`self`/`globalThis`/`top`/`parent`/`frames` |
+| Dynamic global access | bracket/computed access on `window`/`self`/`globalThis`/`top`/`parent`/`frames`, plus `Reflect.*` and `getOwnPropertyDescriptor(s)` (both retrieve a named global, e.g. `Reflect.get(globalThis, "fetch")`, without ever writing `.fetch` or `["fetch"]`) |
 | Extension APIs | any `chrome.*` |
 | Deferred execution | `setTimeout`, `setInterval`, `requestIdleCallback`, `Worker` |
 | Acting, not reading | `.click()`, `.submit()`, `window.open`, `location.href =`, `document.write`, `postMessage` |
@@ -82,6 +82,15 @@ by `new Function(src)`/`Function(src)` and invoked with no receiver — exactly 
 extractor runner calls it — has `this` bound to the global object, so bare `this` reaches
 `fetch`/`document`/`eval` without naming any of them. Closing these still leaves the screen
 a denylist, not a sandbox.
+
+**Known remaining gap, stated plainly rather than papered over:** aliasing a global to a
+local first (`var w = window;`) and then enumerating its own properties by predicate —
+`Object.values(w).find(v => typeof v === "function" && v.name === "fetch")` — still gets
+past every rule above, since no denied identifier ever appears in a pattern the rules
+match against. Closing that needs either static analysis over actual identifier bindings
+(an AST walk, not text) or running the extractor somewhere `fetch`/`document` are not
+reachable at all — not another regex. Until one of those lands, treat this file as raising
+the cost of an attack and making it visible, never as proof of containment.
 
 This is a denylist, and a denylist over source text is not a sandbox. It raises the cost of
 an injected extractor substantially and makes the attempt visible; it is not a proof of

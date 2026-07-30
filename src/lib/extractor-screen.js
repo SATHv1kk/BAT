@@ -20,15 +20,28 @@
 // arms race into the stripper.
 //
 // A token denylist over source text is fundamentally not a sandbox — it can
-// only refuse spellings it was told about. Two rules below (`.constructor` and
-// bare `this`) exist specifically to close the general escape routes rather
-// than one keyword at a time: `(fn).constructor` reaches the Function
-// constructor without ever naming "Function" or "eval", and a function built
-// by `new Function(src)` and invoked with no receiver (exactly how
-// extractInPage calls it) runs with `this` bound to the global object, so bare
-// `this` hands over fetch/document/eval with no banned identifier in sight.
-// Closing both still leaves this a denylist, not a proof of containment — the
-// allowlist above it is the real boundary (see SECURITY.md).
+// only refuse spellings it was told about. Several rules below (`.constructor`,
+// bare `this`, `Reflect`, `getOwnPropertyDescriptor`) exist specifically to
+// close general escape routes rather than one keyword at a time: `(fn).
+// constructor` reaches the Function constructor without ever naming
+// "Function" or "eval"; a function built by `new Function(src)` and invoked
+// with no receiver (exactly how extractInPage calls it) runs with `this`
+// bound to the global object; and Reflect/getOwnPropertyDescriptor retrieve a
+// named global property (e.g. "fetch") without ever writing `.fetch` or
+// `["fetch"]` in a form any dot/bracket rule would see.
+//
+// KNOWN REMAINING GAP, stated plainly rather than papered over: aliasing a
+// global to a local first (`var w = window;`) and then enumerating its OWN
+// properties by predicate — `Object.values(w).find(v => typeof v ===
+// "function" && v.name === "fetch")` — still gets past every rule here, since
+// nothing in the source ever names "window", "fetch", "constructor" or
+// "this" in a pattern any of the rules above match against. Closing that
+// requires either static analysis (an AST walk over actual identifier
+// bindings, not text) or running the extractor somewhere `fetch`/`document`
+// genuinely are not reachable at all — not another regex. Until one of those
+// lands, treat this file as raising the cost of an attack and making it
+// visible, never as proof of containment. The allowlist above it is the real
+// boundary (see SECURITY.md).
 const DENIED = [
   { re: /\bfetch\s*\(/,                          why: 'network access (fetch)' },
   { re: /\bXMLHttpRequest\b/,                    why: 'network access (XMLHttpRequest)' },
@@ -62,6 +75,13 @@ const DENIED = [
   // Escaping identifier-based matching by indexing the global object
   // dynamically, e.g. window['fetch'] or self['ev'+'al'].
   { re: /\b(?:window|self|globalThis|top|parent|frames)\s*\[/, why: 'dynamic property access on a global object (bracket notation)' },
+  // Reflect.get(globalThis, "fetch") and
+  // Object.getOwnPropertyDescriptor(globalThis, "fetch").value retrieve a
+  // named global property without ever writing `globalThis.fetch` or
+  // `globalThis["fetch"]` — neither the dot form nor the bracket-notation
+  // rule above sees them. No legitimate DOM-reading extractor needs either.
+  { re: /\bReflect\b/,                            why: 'reflection API access (Reflect.*) — can retrieve arbitrary globals by name' },
+  { re: /\bgetOwnPropertyDescriptors?\b/,         why: 'property descriptor introspection — can retrieve arbitrary globals by name' },
   { re: /\bdocument\s*\.\s*cookie\b/,            why: 'credential access (document.cookie)' },
   { re: /\b(?:local|session)Storage\b/,           why: 'credential access (web storage)' },
   { re: /\bindexedDB\b/,                         why: 'credential access (IndexedDB)' },

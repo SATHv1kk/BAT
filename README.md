@@ -166,7 +166,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 397 offline assertions — deterministic, no network. Gates CI.
+npm test           # 399 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs

@@ -73,6 +73,10 @@ export default function run(t) {
   t('window bracket access denied', denied('var f = window["fetch"]; return [];'));
   t('self bracket access denied', denied('var f = self["eval"]; return [];'));
   t('globalThis bracket access denied', denied('var f = globalThis["fetch"]; return [];'));
+  // Reflect/property-descriptor introspection retrieve a named global without
+  // ever writing the dot or bracket form any rule above matches.
+  t('Reflect.get global-retrieval denied', denied('var f = Reflect.get(globalThis, "fetch"); return [];'));
+  t('getOwnPropertyDescriptor global-retrieval denied', denied('var f = Object.getOwnPropertyDescriptor(globalThis, "fetch").value; return [];'));
 
   // ── extension API reach ──
   t('chrome.runtime denied', denied('chrome.runtime.sendMessage({}); return [];'));
