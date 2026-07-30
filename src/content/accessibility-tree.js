@@ -1,2 +1,421 @@
-(function(){window.__batElementMap||(window.__batElementMap={}),window.__batElementReverseMap||(window.__batElementReverseMap=new WeakMap),window.__batRefCounter||(window.__batRefCounter=0),window.__generateAccessibilityTree=function(e,t,r,i){try{let g=function(e){var t=e.getAttribute("role");if(t)return t;var r=e.tagName.toLowerCase(),i=e.getAttribute("type");return{a:"link",button:"button",input:"submit"===i||"button"===i?"button":"checkbox"===i?"checkbox":"radio"===i?"radio":"file"===i?"button":"textbox",select:"combobox",textarea:"textbox",h1:"heading",h2:"heading",h3:"heading",h4:"heading",h5:"heading",h6:"heading",img:"image",nav:"navigation",main:"main",header:"banner",footer:"contentinfo",section:"region",article:"article",aside:"complementary",form:"form",table:"table",ul:"list",ol:"list",li:"listitem",label:"label"}[r]||"generic"},m=function(e){var t=(e.getAttribute("type")||"").toLowerCase();if("password"===t||"hidden"===t)return!0;for(var r=(e.getAttribute("autocomplete")||"").toLowerCase(),i=["current-password","new-password","one-time-code","cc-number","cc-csc","cc-exp","cc-exp-month","cc-exp-year"],n=0;n<i.length;n++)if(-1!==r.indexOf(i[n]))return!0;return!1},p=function(e){for(var t="",r=0;r<e.childNodes.length;r++)e.childNodes[r].nodeType===Node.TEXT_NODE&&(t+=e.childNodes[r].textContent);return t.trim()},w=function(e){var t=e.tagName.toLowerCase();if("select"===t){if(m(e)){var r=e.getAttribute("aria-label");if(r&&r.trim())return r.trim();var i=e.getAttribute("title");if(i&&i.trim())return i.trim();if(e.id){var n=document.querySelector('label[for="'+e.id+'"]');if(n){var a=p(n);if(a)return a}}return"[value redacted]"}var o=e,l=o.querySelector("option[selected]")||o.options[o.selectedIndex];if(l&&l.textContent)return l.textContent.trim()}var u=e.getAttribute("aria-label");if(u&&u.trim())return u.trim();var d=e.getAttribute("placeholder");if(d&&d.trim())return d.trim();var c=e.getAttribute("title");if(c&&c.trim())return c.trim();var f=e.getAttribute("alt");if(f&&f.trim())return f.trim();if(e.id){var s=document.querySelector('label[for="'+e.id+'"]');if(s){var h=p(s);if(h)return h}}if("input"===t){var g=e,w=e.getAttribute("type")||"",v=e.getAttribute("value");if("submit"===w&&v&&v.trim())return v.trim();if(m(e))return g.value?"[value redacted]":"";if(g.value&&g.value.length<50&&g.value.trim())return g.value.trim()}if("textarea"===t&&m(e))return e.value?"[value redacted]":"";if(["button","a","summary"].includes(t)){for(var b="",_=0;_<e.childNodes.length;_++){var y=e.childNodes[_];y.nodeType===Node.TEXT_NODE&&(b+=y.textContent)}if(b.trim())return b.trim()}if(t.match(/^h[1-6]$/)){var x=e.textContent;if(x&&x.trim())return x.trim().substring(0,100)}if("img"===t)return"";for(var A="",C=0;C<e.childNodes.length;C++){var E=e.childNodes[C];E.nodeType===Node.TEXT_NODE&&(A+=E.textContent)}if(A&&A.trim()&&A.trim().length>=3){var N=A.trim();return N.length>100?N.substring(0,100)+"...":N}return""},v=function(e){var t=window.getComputedStyle(e);return"none"!==t.display&&"hidden"!==t.visibility&&"0"!==t.opacity&&e.offsetWidth>0&&e.offsetHeight>0},b=function(e){var t=e.tagName.toLowerCase();return["a","button","input","select","textarea","details","summary"].includes(t)||null!==e.getAttribute("onclick")||null!==e.getAttribute("tabindex")||"button"===e.getAttribute("role")||"link"===e.getAttribute("role")||"true"===e.getAttribute("contenteditable")},_=function(e){var t=e.tagName.toLowerCase();return["h1","h2","h3","h4","h5","h6","nav","main","header","footer","section","article","aside"].includes(t)||null!==e.getAttribute("role")},y=function(e,t){var r=e.tagName.toLowerCase();if(["script","style","meta","link","title","noscript"].includes(r))return!1;if("all"!==t.filter&&"true"===e.getAttribute("aria-hidden"))return!1;if("all"!==t.filter&&!v(e))return!1;if("all"!==t.filter&&!t.refId){var i=e.getBoundingClientRect();if(!(i.top<window.innerHeight&&i.bottom>0&&i.left<window.innerWidth&&i.right>0))return!1}if("interactive"===t.filter)return b(e);if(b(e))return!0;if(_(e))return!0;if(w(e).length>0)return!0;var n=g(e);return null!==n&&"generic"!==n&&"image"!==n},x=function(e,t,r){if(!(l>=o)&&!(t>a)&&e&&e.tagName){var i=y(e,r)||null!==r.refId&&0===t;if(i){var u=g(e),d=w(e),c=window.__batElementReverseMap.get(e)||null;if(c){var f=window.__batElementMap[c];f&&f.deref()===e||(c=null)}c||(c="ref_"+ ++window.__batRefCounter,window.__batElementMap[c]=new WeakRef(e),window.__batElementReverseMap.set(e,c),function(){try{e.setAttribute("data-ext-ref",c)}catch(f){}}()),l++;var s=" ".repeat(t)+u;if(d&&(s+=' "'+(d=d.replace(/\s+/g," ").substring(0,100)).replace(/"/g,'\\"')+'"'),s+=" ["+c+"]",e.getAttribute("href")&&(s+=' href="'+e.getAttribute("href")+'"'),e.getAttribute("type")&&(s+=' type="'+e.getAttribute("type")+'"'),e.getAttribute("placeholder")&&(s+=' placeholder="'+e.getAttribute("placeholder")+'"'),n.push(s),"select"===e.tagName.toLowerCase()&&!m(e))for(var h=e.options,p=0;p<h.length;p++){var v=h[p],b=" ".repeat(t+1)+"option",_=v.textContent?v.textContent.trim():"";_&&(b+=' "'+(_=_.replace(/\s+/g," ").substring(0,100)).replace(/"/g,'\\"')+'"'),v.selected&&(b+=" (selected)"),v.value&&v.value!==_&&(b+=' value="'+v.value.replace(/"/g,'\\"')+'"'),n.push(b)}}if(("select"!==e.tagName.toLowerCase()||!m(e))&&e.children&&t<a)for(var A=0;A<e.children.length;A++)x(e.children[A],i?t+1:t,r)}};var n=[],a=null!=t?t:15,o=1e4,l=0,u={filter:e||"all",refId:i};if(i){var d=window.__batElementMap[i];if(!d)return{error:"Element with ref_id '"+i+"' not found. It may have been removed from the page. Use read_page without ref_id to get the current page state.",pageContent:"",viewport:{width:window.innerWidth,height:window.innerHeight}};var c=d.deref();if(!c)return{error:"Element with ref_id '"+i+"' no longer exists. It may have been removed from the page. Use read_page without ref_id to get the current page state.",pageContent:"",viewport:{width:window.innerWidth,height:window.innerHeight}};x(c,0,u)}else document.body&&x(document.body,0,u);for(var f in window.__batElementMap)window.__batElementMap[f].deref()||delete window.__batElementMap[f];var s=n.join("\n");if(l>=o&&(s+="\n[truncated at "+o+" elements — page is very large; "+(i?"use a smaller depth or focus on a more specific child element":"use a refId or smaller depth to focus")+"]"),null!=r&&s.length>r){var h="Output exceeds "+r+" character limit ("+s.length+" characters). ";return{error:h+=i?"The specified element has too much content. Try specifying a smaller depth parameter or focus on a more specific child element.":void 0!==t?"Try specifying an even smaller depth parameter or use ref_id to focus on a specific element.":"Try specifying a depth parameter (e.g., depth: 5) or use ref_id to focus on a specific element from the page.",pageContent:"",viewport:{width:window.innerWidth,height:window.innerHeight}}}return{pageContent:s,viewport:{width:window.innerWidth,height:window.innerHeight}}}catch(g){throw new Error("Error generating accessibility tree: "+(g.message||"Unknown error"))}};
-})()
+// Accessibility-tree serialiser — the model's only view of a page.
+//
+// Injected into EVERY frame at document_start as a CLASSIC content script
+// (manifest content_scripts, plus on-demand injection from the panel via
+// `?script`). It must therefore stay a plain IIFE with no imports and no
+// module syntax: there is no bundler pass on the injected form, and an ESM
+// `import` would fail to load in the isolated world.
+//
+// Output is one indented line per element, e.g.
+//   textbox "Email" [ref_12] type="email" placeholder="you@example.com"
+//    option "Ireland" (selected) value="IE"
+// The [ref_N] tokens are the only handles the model ever gets on the DOM;
+// click/type/select all resolve them through window.__batElementMap.
+(function () {
+  // Refs must stay valid across repeated read_page calls in the same document,
+  // so the maps live on window and are initialised once per frame. WeakRef /
+  // WeakMap so serialising an element never keeps a detached node alive.
+  if (!window.__batElementMap) window.__batElementMap = {};                          // ref -> WeakRef(element)
+  if (!window.__batElementReverseMap) window.__batElementReverseMap = new WeakMap();  // element -> ref
+  if (!window.__batRefCounter) window.__batRefCounter = 0;
+
+  // MIRROR of src/lib/redaction.js — keep in sync; tested there.
+  // Duplicated (not imported) only because a classic content script cannot
+  // import an ES module. Any change here must be made there too.
+  var SENSITIVE_AUTOCOMPLETE = [
+    'current-password',
+    'new-password',
+    'one-time-code',
+    'cc-number',
+    'cc-csc',
+    'cc-exp',
+    'cc-exp-month',
+    'cc-exp-year'
+  ];
+  var REDACTED = '[value redacted]';
+
+  // Substring (not equality) match on autocomplete: real forms ship space-
+  // separated and section-prefixed tokens like "section-billing cc-number".
+  function isSensitiveField(type, autocomplete) {
+    if (type === 'password' || type === 'hidden') return true;
+    for (var i = 0; i < SENSITIVE_AUTOCOMPLETE.length; i++) {
+      if (autocomplete.indexOf(SENSITIVE_AUTOCOMPLETE[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  // DOM adapter over the mirrored policy above.
+  function isSensitive(el) {
+    return isSensitiveField(
+      (el.getAttribute('type') || '').toLowerCase(),
+      (el.getAttribute('autocomplete') || '').toLowerCase()
+    );
+  }
+
+  var ELEMENT_CAP = 10000;
+  var DEFAULT_DEPTH = 15;
+  var NAME_MAX = 100;
+
+  // Roles the model can reason about. An explicit role attribute always wins;
+  // otherwise the tag (and for <input>, its type) decides.
+  function getRole(el) {
+    var explicit = el.getAttribute('role');
+    if (explicit) return explicit;
+
+    var tag = el.tagName.toLowerCase();
+    var type = el.getAttribute('type');
+
+    return {
+      a: 'link',
+      button: 'button',
+      input: type === 'submit' || type === 'button' ? 'button'
+        : type === 'checkbox' ? 'checkbox'
+        : type === 'radio' ? 'radio'
+        // A file picker behaves like a button to the model — it cannot type into it.
+        : type === 'file' ? 'button'
+        : 'textbox',
+      select: 'combobox',
+      textarea: 'textbox',
+      h1: 'heading',
+      h2: 'heading',
+      h3: 'heading',
+      h4: 'heading',
+      h5: 'heading',
+      h6: 'heading',
+      img: 'image',
+      nav: 'navigation',
+      main: 'main',
+      header: 'banner',
+      footer: 'contentinfo',
+      section: 'region',
+      article: 'article',
+      aside: 'complementary',
+      form: 'form',
+      table: 'table',
+      ul: 'list',
+      ol: 'list',
+      li: 'listitem',
+      label: 'label'
+    }[tag] || 'generic';
+  }
+
+  // This element's OWN text only. Using textContent instead would make every
+  // wrapper <div> inherit the whole subtree's text.
+  function directText(el) {
+    var text = '';
+    for (var i = 0; i < el.childNodes.length; i++) {
+      if (el.childNodes[i].nodeType === Node.TEXT_NODE) text += el.childNodes[i].textContent;
+    }
+    return text.trim();
+  }
+
+  function labelForText(el) {
+    if (!el.id) return '';
+    var labelEl = document.querySelector('label[for="' + el.id + '"]');
+    if (!labelEl) return '';
+    return directText(labelEl);
+  }
+
+  // A sensitive <select> still needs a findable name, but it must never come
+  // from the selected option — that option IS the secret.
+  function sensitiveSelectName(el) {
+    var ariaLabel = el.getAttribute('aria-label');
+    if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+    var title = el.getAttribute('title');
+    if (title && title.trim()) return title.trim();
+    var labelText = labelForText(el);
+    if (labelText) return labelText;
+    return REDACTED;
+  }
+
+  // Accessible name, resolved in descending order of author intent:
+  // aria-label > placeholder > title > alt > <label for> > element-specific
+  // (value / own text) > own text fallback.
+  function getAccessibleName(el) {
+    var tag = el.tagName.toLowerCase();
+
+    if (tag === 'select') {
+      if (isSensitive(el)) return sensitiveSelectName(el);
+      // querySelector first so a server-rendered `selected` attribute wins over
+      // whatever the browser defaulted selectedIndex to.
+      var selected = el.querySelector('option[selected]') || el.options[el.selectedIndex];
+      if (selected && selected.textContent) return selected.textContent.trim();
+      // No option text: fall through to the generic resolution below.
+    }
+
+    var ariaLabel = el.getAttribute('aria-label');
+    if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+    var placeholder = el.getAttribute('placeholder');
+    if (placeholder && placeholder.trim()) return placeholder.trim();
+    var title = el.getAttribute('title');
+    if (title && title.trim()) return title.trim();
+    var alt = el.getAttribute('alt');
+    if (alt && alt.trim()) return alt.trim();
+    var labelText = labelForText(el);
+    if (labelText) return labelText;
+
+    if (tag === 'input') {
+      var type = el.getAttribute('type') || '';
+      var valueAttr = el.getAttribute('value');
+      // A submit button's label IS its value attribute.
+      if (type === 'submit' && valueAttr && valueAttr.trim()) return valueAttr.trim();
+      // Sensitive input: report only WHETHER it is filled, never with what.
+      if (isSensitive(el)) return el.value ? REDACTED : '';
+      // Short live values orient the model in a half-filled form; long ones are
+      // pasted prose that would bloat the tree.
+      if (el.value && el.value.length < 50 && el.value.trim()) return el.value.trim();
+    }
+
+    if (tag === 'textarea' && isSensitive(el)) return el.value ? REDACTED : '';
+
+    if (['button', 'a', 'summary'].includes(tag)) {
+      var ownText = directText(el);
+      if (ownText) return ownText;
+    }
+
+    if (tag.match(/^h[1-6]$/)) {
+      // Headings are the page's outline, so the full subtree text is wanted here
+      // even though it is truncated hard.
+      var headingText = el.textContent;
+      if (headingText && headingText.trim()) return headingText.trim().substring(0, NAME_MAX);
+    }
+
+    // An unlabelled <img> is decorative; naming it from nearby text would lie.
+    if (tag === 'img') return '';
+
+    // Last resort. The >= 3 floor drops stray punctuation and single-character
+    // separators that would otherwise name half the generic containers.
+    var text = directText(el);
+    if (text.length >= 3) {
+      return text.length > NAME_MAX ? text.substring(0, NAME_MAX) + '...' : text;
+    }
+
+    return '';
+  }
+
+  // Cheap approximation of "the user can see this". offsetWidth/Height also
+  // catches ancestors with display:none without walking up the tree.
+  function isVisible(el) {
+    var style = window.getComputedStyle(el);
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.opacity !== '0' &&
+      el.offsetWidth > 0 &&
+      el.offsetHeight > 0;
+  }
+
+  // Anything the model could plausibly act on. Deliberately generous: a div with
+  // onclick/tabindex/role is how most component libraries build buttons.
+  function isInteractive(el) {
+    var tag = el.tagName.toLowerCase();
+    return ['a', 'button', 'input', 'select', 'textarea', 'details', 'summary'].includes(tag) ||
+      el.getAttribute('onclick') !== null ||
+      el.getAttribute('tabindex') !== null ||
+      el.getAttribute('role') === 'button' ||
+      el.getAttribute('role') === 'link' ||
+      el.getAttribute('contenteditable') === 'true';
+  }
+
+  // Structure worth keeping even when not interactive, so the model can tell
+  // "the nav" from "the results list".
+  function isLandmark(el) {
+    var tag = el.tagName.toLowerCase();
+    return ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'nav', 'main', 'header', 'footer', 'section', 'article', 'aside'].includes(tag) ||
+      el.getAttribute('role') !== null;
+  }
+
+  function shouldInclude(el, ctx) {
+    var tag = el.tagName.toLowerCase();
+    if (['script', 'style', 'meta', 'link', 'title', 'noscript'].includes(tag)) return false;
+
+    // filter === 'all' is the debug/whole-document mode: no hiding heuristics at
+    // all, because the point of it is to explain why something went missing.
+    if (ctx.filter !== 'all' && el.getAttribute('aria-hidden') === 'true') return false;
+    if (ctx.filter !== 'all' && !isVisible(el)) return false;
+
+    // Off-screen content is dropped so a long page reads as what the user is
+    // actually looking at — but never when the caller scoped the read to a
+    // refId, since that element may well be below the fold.
+    if (ctx.filter !== 'all' && !ctx.refId) {
+      var rect = el.getBoundingClientRect();
+      var intersectsViewport = rect.top < window.innerHeight && rect.bottom > 0 &&
+        rect.left < window.innerWidth && rect.right > 0;
+      if (!intersectsViewport) return false;
+    }
+
+    if (ctx.filter === 'interactive') return isInteractive(el);
+
+    if (isInteractive(el)) return true;
+    if (isLandmark(el)) return true;
+    if (getAccessibleName(el).length > 0) return true;
+
+    // Keep anything with a meaningful role; 'generic' and bare images carry no
+    // information the model can use.
+    var role = getRole(el);
+    return role !== null && role !== 'generic' && role !== 'image';
+  }
+
+  /**
+   * @param {'all'|'interactive'|string} [filter]
+   * @param {number} [depth]     max tree depth (default 15)
+   * @param {number} [maxChars]  refuse to return output longer than this
+   * @param {string} [refId]     read only this previously returned ref's subtree
+   * @returns {{pageContent: string, viewport: {width: number, height: number}}
+   *          | {error: string, pageContent: '', viewport: {width: number, height: number}}}
+   */
+  window.__generateAccessibilityTree = function (filter, depth, maxChars, refId) {
+    try {
+      var lines = [];
+      var maxDepth = depth != null ? depth : DEFAULT_DEPTH;
+      var count = 0;
+      var ctx = { filter: filter || 'all', refId: refId };
+
+      function viewport() {
+        return { width: window.innerWidth, height: window.innerHeight };
+      }
+
+      function walk(el, level) {
+        // Stop at the caps before doing any per-element work.
+        if (count >= ELEMENT_CAP) return;
+        if (level > maxDepth) return;
+        if (!el || !el.tagName) return;
+
+        // A refId-scoped read always emits its own root: the caller asked for
+        // that element by name, so filtering it out would return nothing.
+        // NOTE: refId is `undefined` (not null) on a whole-page read, so the
+        // strict !== null also force-includes <body> at level 0. Intentional —
+        // it guarantees the tree always has a root line.
+        var included = shouldInclude(el, ctx) || (ctx.refId !== null && level === 0);
+
+        if (included) {
+          var role = getRole(el);
+          var name = getAccessibleName(el);
+
+          // Reuse the ref already handed to the model for this element so refs
+          // it saw in an earlier read keep resolving. The WeakRef re-check
+          // catches a reverse-map entry whose forward entry was swept or
+          // reassigned, and forces a fresh ref in that case.
+          var ref = window.__batElementReverseMap.get(el) || null;
+          if (ref) {
+            var existing = window.__batElementMap[ref];
+            if (!existing || existing.deref() !== el) ref = null;
+          }
+          if (!ref) {
+            ref = 'ref_' + (++window.__batRefCounter);
+            window.__batElementMap[ref] = new WeakRef(el);
+            window.__batElementReverseMap.set(el, ref);
+            // Mirrored into the DOM as a debugging/selector aid. Writing an
+            // attribute can throw (readonly or exotic nodes), and that must not
+            // abort the whole read.
+            try { el.setAttribute('data-ext-ref', ref); } catch (attrErr) {}
+          }
+          count++;
+
+          var line = ' '.repeat(level) + role;
+          if (name) {
+            name = name.replace(/\s+/g, ' ').substring(0, NAME_MAX);
+            line += ' "' + name.replace(/"/g, '\\"') + '"';
+          }
+          line += ' [' + ref + ']';
+          // Attributes the model needs to decide what a control does.
+          if (el.getAttribute('href')) line += ' href="' + el.getAttribute('href') + '"';
+          if (el.getAttribute('type')) line += ' type="' + el.getAttribute('type') + '"';
+          if (el.getAttribute('placeholder')) line += ' placeholder="' + el.getAttribute('placeholder') + '"';
+          lines.push(line);
+
+          // Enumerate options so select_option can be called with a valid value
+          // without another round trip. NOT for a sensitive select: its option
+          // list is the value space of a secret.
+          if (el.tagName.toLowerCase() === 'select' && !isSensitive(el)) {
+            var options = el.options;
+            for (var o = 0; o < options.length; o++) {
+              var option = options[o];
+              var optionLine = ' '.repeat(level + 1) + 'option';
+              var text = option.textContent ? option.textContent.trim() : '';
+              if (text) {
+                text = text.replace(/\s+/g, ' ').substring(0, NAME_MAX);
+                optionLine += ' "' + text.replace(/"/g, '\\"') + '"';
+              }
+              if (option.selected) optionLine += ' (selected)';
+              // Only worth a token when the value differs from the label the
+              // model just read (compared post-collapse/truncation).
+              if (option.value && option.value !== text) {
+                optionLine += ' value="' + option.value.replace(/"/g, '\\"') + '"';
+              }
+              lines.push(optionLine);
+            }
+          }
+        }
+
+        // Never descend into a sensitive <select> — its children are the values.
+        var sensitiveSelect = el.tagName.toLowerCase() === 'select' && isSensitive(el);
+        if (!sensitiveSelect && el.children && level < maxDepth) {
+          for (var c = 0; c < el.children.length; c++) {
+            // Indent only advances past elements we actually emitted, so layout
+            // wrapper divs do not push the whole tree to the right.
+            walk(el.children[c], included ? level + 1 : level);
+          }
+        }
+      }
+
+      if (refId) {
+        var entry = window.__batElementMap[refId];
+        if (!entry) {
+          return {
+            error: "Element with ref_id '" + refId + "' not found. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
+            pageContent: '',
+            viewport: viewport()
+          };
+        }
+        var root = entry.deref();
+        if (!root) {
+          return {
+            error: "Element with ref_id '" + refId + "' no longer exists. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
+            pageContent: '',
+            viewport: viewport()
+          };
+        }
+        walk(root, 0);
+      } else if (document.body) {
+        // At document_start there may be no body yet; an empty tree is correct.
+        walk(document.body, 0);
+      }
+
+      // Sweep refs whose elements have been collected, so the map does not grow
+      // without bound over the life of a long-running tab.
+      for (var staleRef in window.__batElementMap) {
+        if (!window.__batElementMap[staleRef].deref()) delete window.__batElementMap[staleRef];
+      }
+
+      var pageContent = lines.join('\n');
+
+      if (count >= ELEMENT_CAP) {
+        pageContent += '\n[truncated at ' + ELEMENT_CAP + ' elements — page is very large; ' +
+          (refId
+            ? 'use a smaller depth or focus on a more specific child element'
+            : 'use a refId or smaller depth to focus') +
+          ']';
+      }
+
+      // Over budget: return the error INSTEAD of the content. Handing back a
+      // truncated tree would have the model click refs from a half-read page.
+      if (maxChars != null && pageContent.length > maxChars) {
+        var error = 'Output exceeds ' + maxChars + ' character limit (' + pageContent.length + ' characters). ';
+        if (refId) {
+          error += 'The specified element has too much content. Try specifying a smaller depth parameter or focus on a more specific child element.';
+        } else if (depth !== undefined) {
+          // `!== undefined`, not `!= null`: an explicit `depth: null` still means
+          // the caller knows about the parameter, so it gets the tighter advice.
+          error += 'Try specifying an even smaller depth parameter or use ref_id to focus on a specific element.';
+        } else {
+          error += 'Try specifying a depth parameter (e.g., depth: 5) or use ref_id to focus on a specific element from the page.';
+        }
+        return { error: error, pageContent: '', viewport: viewport() };
+      }
+
+      return { pageContent: pageContent, viewport: viewport() };
+    } catch (err) {
+      throw new Error('Error generating accessibility tree: ' + (err.message || 'Unknown error'));
+    }
+  };
+})();

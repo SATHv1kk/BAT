@@ -46,11 +46,5 @@
       "all_frames": false,
       "run_at": "document_idle"
     }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["assets/*"],
-      "matches": ["<all_urls>"]
-    }
   ]
 }
