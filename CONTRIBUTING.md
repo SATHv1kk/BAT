@@ -35,11 +35,24 @@ convenience default that turns the boundary off.
 
 ### An extractor is a pure, synchronous DOM reader
 
-Model-authored extractor source is screened by `lib/extractor-screen.js` before it runs or
-is cached. If you widen what extractors may do, widen the screen deliberately and add
-assertions to `test/extractor-screen.test.mjs` — do not remove the check because a
-legitimate extractor tripped it. The correct fix for a false positive is a narrower rule,
-not no rule.
+Model-authored extractor source is screened by TWO layers before it runs or is cached:
+`lib/extractor-screen.js` (text denylist) and `lib/extractor-ast-screen.js` (AST alias
+tracking — parses the source and follows which local names become aliases of a dangerous
+global through assignment, destructuring, or parameter binding, so a rename doesn't defeat
+the text layer). If you widen what extractors may do, widen both deliberately and add
+assertions to `test/extractor-screen.test.mjs` / `test/extractor-ast-screen.test.mjs` — do
+not remove a check because a legitimate extractor tripped it. The correct fix for a false
+positive is a narrower rule, not no rule.
+
+If you find a NEW alias shape the AST screen misses (a new binding form, a new capability
+route), verify it in Node against `screenExtractorSourceAst` directly before touching
+anything, the way the existing bypasses were confirmed — a "fix" for a bypass you haven't
+actually reproduced is unverified. And when adding a case, pair it with the corresponding
+"this must still pass" assertion (an ordinary destructuring of an unrelated object, a
+legitimate use of the same base identifier) — the two bugs actually found while building
+this file were a broken import (caught immediately by the test suite) and a missing
+`document` alias check (caught by exactly this kind of paired test), not by the "must
+deny" side alone.
 
 ### Nothing sensitive leaves the browser
 

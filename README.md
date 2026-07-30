@@ -166,7 +166,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 399 offline assertions — deterministic, no network. Gates CI.
+npm test           # 439 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs
@@ -206,7 +206,8 @@ src/
 │   ├── page-tools.js      Read tools (find, page text, tab list)
 │   ├── allowlist.js       The security boundary — fails closed
 │   ├── redaction.js       Sensitive-field policy (mirrored by the content script)
-│   ├── extractor-screen.js  Refuses extractor source that is not a pure DOM reader
+│   ├── extractor-screen.js  Text denylist: refuses extractor source that is not a pure DOM reader
+│   ├── extractor-ast-screen.js  AST alias tracking: closes what the text screen can't see
 │   ├── extractor-exec.js  Runs extractors: scripting → CDP on CSP block
 │   ├── extractors.js      URL patterns, schema fingerprints, replay validation
 │   ├── state-store.js     IndexedDB: rows/dedup, runs, log, extractor cache
@@ -292,13 +293,22 @@ page mutation are all refused — along with the general escape routes a keyword
 name one spelling at a time: `.constructor` (the standard prototype-chain path to
 `Function` that never spells "Function" or "eval"), and bare `this` (a function compiled
 this way and called with no receiver runs with `this` bound to the global object, handing
-over `fetch`/`document`/`eval` without naming any of them). Screening happens in the
-panel, in the runner, and again inside `runExtractor` itself. Rejected source is shown to
-you in full.
+over `fetch`/`document`/`eval` without naming any of them).
 
-This is still a denylist over source text, not a sandbox — it raises the cost of an
-injected extractor and makes the attempt visible, it does not prove containment. The
-allowlist above it is the real boundary.
+A second, independent check runs alongside the text screen: `extractor-ast-screen.js`
+parses the source into a real AST and tracks which local names become aliases of a
+dangerous global through actual assignment, destructuring, or parameter binding — so
+`var w = window; w["fetch"](...)` or `var {fetch: f} = window; f(...)`, which read as
+ordinary variable use to any text matcher, resolve back to what they actually reach.
+Screening (both layers) happens in the panel, in the runner, and again inside
+`runExtractor` itself. Rejected source is shown to you in full.
+
+This is still fundamentally a denylist, not a sandbox — it raises the cost of an injected
+extractor and makes the attempt visible, it does not prove containment. The AST layer
+tracks specific common binding shapes, not a full points-to analysis; a reference stashed
+somewhere it doesn't model (an arbitrary object field, a `Map`, a `Promise`, a `Proxy`)
+still escapes both layers. See SECURITY.md for the precise scope. The allowlist above all
+of this is the real boundary.
 
 ### 3. Redaction — before anything leaves the browser
 

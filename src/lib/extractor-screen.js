@@ -30,18 +30,33 @@
 // named global property (e.g. "fetch") without ever writing `.fetch` or
 // `["fetch"]` in a form any dot/bracket rule would see.
 //
-// KNOWN REMAINING GAP, stated plainly rather than papered over: aliasing a
-// global to a local first (`var w = window;`) and then enumerating its OWN
-// properties by predicate — `Object.values(w).find(v => typeof v ===
-// "function" && v.name === "fetch")` — still gets past every rule here, since
-// nothing in the source ever names "window", "fetch", "constructor" or
-// "this" in a pattern any of the rules above match against. Closing that
-// requires either static analysis (an AST walk over actual identifier
-// bindings, not text) or running the extractor somewhere `fetch`/`document`
-// genuinely are not reachable at all — not another regex. Until one of those
-// lands, treat this file as raising the cost of an attack and making it
-// visible, never as proof of containment. The allowlist above it is the real
-// boundary (see SECURITY.md).
+// `screenExtractorSourceAst` (extractor-ast-screen.js) runs right after this
+// text pass and closes the aliasing hole this one cannot: it parses the
+// source and tracks, by actual assignment/destructuring/parameter binding,
+// which local names become aliases of a dangerous global or capability, so
+// `var w = window; w.fetch(...)` (invisible to any text-based rule below) is
+// caught the same as `window.fetch(...)` would be — including through
+// renaming destructuring (`var {fetch: f} = window`) and enumeration of a
+// TRACKED alias (`Object.values(w)` once `w` is known to be `window`).
+//
+// KNOWN REMAINING GAP, stated plainly rather than papered over: the AST pass
+// tracks specific, common binding shapes (var/let/const, `=`, destructuring,
+// IIFE parameters) — it is not a full points-to analysis. A reference stashed
+// somewhere it doesn't model — an arbitrary object-literal field
+// (`{w: window}` — "w" isn't a name the analysis knows to treat as
+// window-valued), a Map/Set, a value threaded through a separately-declared
+// named function rather than an inline IIFE, a Promise, a getter, a Proxy —
+// still escapes undetected. Closing THAT fully needs either a real points-to
+// analysis (tracks values through arbitrary containers, not just variable
+// bindings) or running the extractor somewhere `fetch`/`document` are not
+// reachable at all — not another regex, and not more special-cased AST
+// shapes either, which is why this file stops adding those and says so.
+// Until one of those larger changes lands, treat both screens together as
+// raising the cost of an attack and making it visible, never as proof of
+// containment. The allowlist above it is the real boundary (see
+// SECURITY.md).
+import { screenExtractorSourceAst } from './extractor-ast-screen.js';
+
 const DENIED = [
   { re: /\bfetch\s*\(/,                          why: 'network access (fetch)' },
   { re: /\bXMLHttpRequest\b/,                    why: 'network access (XMLHttpRequest)' },
@@ -121,6 +136,24 @@ export function screenExtractorSource(src) {
       if (rule.re.test(s)) hits.push(rule.why);
     } catch { /* a broken rule must not fail the screen */ }
   }
+
+  // Second, independent pass: real identifier/alias tracking over the actual
+  // parsed AST, not text. The regex pass above can only refuse spellings it
+  // was told about — `var w = window; w.fetch(...)` reads as ordinary
+  // identifier use to a text matcher. See extractor-ast-screen.js for why
+  // this exists and what it still can't catch (fully dynamic discovery, e.g.
+  // enumerating a global's properties by predicate rather than by name).
+  // A failure IN the analysis itself (not a rejection FROM it — an unexpected
+  // exception) fails CLOSED: this is a security screen, so "the check broke"
+  // must reject, not silently pass whatever text showed up.
+  let astResult;
+  try {
+    astResult = screenExtractorSourceAst(s);
+  } catch (e) {
+    astResult = { ok: false, reason: `AST safety check failed to run: ${e.message}` };
+  }
+  if (!astResult.ok) hits.push(astResult.reason);
+
   if (hits.length) {
     return { ok: false, reason: [...new Set(hits)].join('; ') };
   }

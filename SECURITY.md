@@ -58,7 +58,13 @@ the existing validity checks cannot help: an extractor that steals a cookie and 
 returns tidy rows passes every one of them.
 
 `src/lib/extractor-screen.js` therefore requires an extractor to be a pure, synchronous
-DOM reader, refusing:
+DOM reader, checked by TWO independent layers run together — a text-based denylist, and a
+real static analysis over the parsed AST (`src/lib/extractor-ast-screen.js`) that tracks
+which local names become aliases of a dangerous global through actual assignment,
+destructuring, or parameter binding. The AST layer exists because the text layer can only
+refuse spellings it was told about: `var w = window; w.fetch(...)` reads as ordinary
+identifier use to anything matching text, but the AST layer knows `w` IS `window` and
+flags it the same as `window.fetch(...)`. Together they refuse:
 
 | Refused | Examples |
 | --- | --- |
@@ -72,25 +78,35 @@ DOM reader, refusing:
 | Acting, not reading | `.click()`, `.submit()`, `window.open`, `location.href =`, `document.write`, `postMessage` |
 
 Screening runs in the panel, in the runner, and again inside `runExtractor` — three call
-sites, one policy, so no path can skip it. Rejected source is surfaced to you in full and
-logged. Covered by `test/extractor-screen.test.mjs`.
+sites, one policy (both layers), so no path can skip it. Rejected source is surfaced to
+you in full and logged. Covered by `test/extractor-screen.test.mjs` and
+`test/extractor-ast-screen.test.mjs`.
 
 The "prototype-chain / receiver escapes" and "dynamic global access" rows exist because a
 keyword denylist can't be closed one spelling at a time: `(fn).constructor` reaches
 `Function` without ever containing the text "Function" or "eval", and a function compiled
 by `new Function(src)`/`Function(src)` and invoked with no receiver — exactly how the
 extractor runner calls it — has `this` bound to the global object, so bare `this` reaches
-`fetch`/`document`/`eval` without naming any of them. Closing these still leaves the screen
-a denylist, not a sandbox.
+`fetch`/`document`/`eval` without naming any of them. The AST layer closes the same class
+of hole one level further: it resolves `var w = window; w["fetch"](...)`,
+`var {fetch: f} = window; f(...)`, `var [w] = [window]; w.fetch(...)`, and
+`(function(w){ Object.values(w) })(window)` back to what they actually reach, across
+chained aliases (`var a=window; var b=a; var c=b.fetch;`), not just the literal spellings
+the text layer matches.
 
-**Known remaining gap, stated plainly rather than papered over:** aliasing a global to a
-local first (`var w = window;`) and then enumerating its own properties by predicate —
-`Object.values(w).find(v => typeof v === "function" && v.name === "fetch")` — still gets
-past every rule above, since no denied identifier ever appears in a pattern the rules
-match against. Closing that needs either static analysis over actual identifier bindings
-(an AST walk, not text) or running the extractor somewhere `fetch`/`document` are not
-reachable at all — not another regex. Until one of those lands, treat this file as raising
-the cost of an attack and making it visible, never as proof of containment.
+**Known remaining gap, stated plainly rather than papered over:** the AST layer tracks
+specific, common binding shapes — variable declaration, plain `=` assignment,
+destructuring, and inline-function (IIFE) parameters — it is not a full points-to
+analysis. A global reference stashed somewhere outside those shapes still escapes both
+layers: an arbitrary object-literal field (`{w: window}` — "w" isn't a name either screen
+knows to treat as window-valued), a value threaded through a separately-declared named
+function rather than an inline IIFE, a `Map`/`Set`, a `Promise`, a getter, a `Proxy`. Fully
+closing that needs a real points-to analysis (tracing values through arbitrary containers,
+not just variable bindings) or running the extractor somewhere `fetch`/`document` are not
+reachable at all — not another regex, and not more special-cased AST shapes either, which
+is why this file stops adding those here rather than chasing an unbounded list. Until one
+of those larger changes lands, treat this screening as raising the cost of an attack and
+making it visible, never as proof of containment.
 
 This is a denylist, and a denylist over source text is not a sandbox. It raises the cost of
 an injected extractor substantially and makes the attempt visible; it is not a proof of
