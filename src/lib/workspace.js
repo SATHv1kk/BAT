@@ -70,6 +70,22 @@ export async function pickWorkspace() {
       if ((await existing.requestPermission({ mode: 'readwrite' })) === 'granted') return existing;
     } catch (_) {}
   }
+  // showDirectoryPicker's availability inside a Chrome extension SIDE PANEL
+  // (as opposed to a popup or a full tab) is genuinely inconsistent across
+  // Chrome versions/builds — this is a documented platform quirk (see
+  // Chromium issue 40240444 and WICG/file-system-access#314), not something
+  // a retry or a different call shape fixes. Detect it up front so the
+  // failure is a clear, actionable message instead of a raw
+  // "showDirectoryPicker is not a function" TypeError.
+  if (typeof window.showDirectoryPicker !== 'function') {
+    throw new Error(
+      'This Chrome build/version does not expose the folder picker inside the side panel '
+      + '(a known Chrome platform limitation, not a BAT bug). Try updating Chrome to the '
+      + 'latest version (chrome://settings/help), then reload the extension. Without a '
+      + 'workspace folder, collected rows still stay safe in the extension\'s own store — '
+      + 'only writing them out to a file on disk is unavailable.'
+    );
+  }
   const handle = await window.showDirectoryPicker({ id: 'bat-workspace', mode: 'readwrite' });
   await idbSet(KEY, handle);
   return handle;
