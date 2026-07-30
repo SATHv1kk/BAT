@@ -55,7 +55,9 @@ let agentTabIdActive = null;
 let visionEnabled   = VISION_SUPPORTED; // DeepSeek cannot read images — off unless the constant flips
 let allowedSites    = [];    // empty = act on NO site (fails closed)
 let allowAllSites   = false; // explicit opt-out of the allowlist entirely
-let usageTotals     = { prompt: 0, completion: 0, requests: 0 };
+// `billable` is what RUN_TOKEN_BUDGET/RUNNER_TOKEN_BUDGET actually compare
+// against — see onUsage below for why it isn't just prompt+completion.
+let usageTotals     = { prompt: 0, completion: 0, requests: 0, billable: 0 };
 let uiLog           = [];    // rendered transcript, persisted for panel reopen
 let restoringUi     = false;
 let queuedMessages  = [];    // messages typed while the agent is running
@@ -1763,24 +1765,32 @@ async function runAgentLoop(userText) {
   persistSession();
 
   let step = 0;
-  const runStartTokens = usageTotals.prompt + usageTotals.completion;
+  const runStartTokens = usageTotals.billable;
   let budgetWarned = false;
   try {
     while (step < MAX_STEPS && !stopRequested) {
       step++;
 
       // Per-run cost ceiling — checked BEFORE the next API call so we never
-      // leave a dangling tool_call when we stop.
-      const runTokens = (usageTotals.prompt + usageTotals.completion) - runStartTokens;
+      // leave a dangling tool_call when we stop. Tracks BILLABLE tokens
+      // (non-cached prompt + completion), not raw prompt+completion: DeepSeek
+      // resends the whole growing conversation every step and reports the
+      // same repeated prefix as prompt_tokens whether or not it was a cache
+      // hit, so a raw-token ceiling measures "how long this conversation has
+      // gotten" more than real cost — and increasingly penalizes exactly the
+      // long, many-step bulk-collection runs this project is built for as
+      // the cached prefix grows (cache hits bill at roughly 1/10th–1/100th
+      // the cache-miss rate on DeepSeek's own pricing).
+      const runTokens = usageTotals.billable - runStartTokens;
       if (runTokens >= RUN_TOKEN_BUDGET) {
         addActivity(step, 'warn', 'Run token budget reached',
-          `${formatTokens(runTokens)} tokens spent this run — stopping. Send a new message to continue.`, 'warn');
+          `${formatTokens(runTokens)} new (non-cached) tokens spent this run — stopping. Send a new message to continue.`, 'warn');
         break;
       }
       if (!budgetWarned && runTokens >= RUN_TOKEN_BUDGET * 0.8) {
         budgetWarned = true;
         addActivity(step, 'warn', 'Token budget 80% used',
-          `${formatTokens(runTokens)} of ${formatTokens(RUN_TOKEN_BUDGET)} for this run.`, 'warn');
+          `${formatTokens(runTokens)} of ${formatTokens(RUN_TOKEN_BUDGET)} new (non-cached) tokens for this run.`, 'warn');
       }
 
       // Deliver messages the user typed while the agent was working — safe
@@ -2131,7 +2141,12 @@ async function restoreSession() {
     if (!Array.isArray(s.bat_session) || !s.bat_session.length) return false;
     session = s.bat_session;
     currentGoal = s.bat_goal || '';
-    if (s.bat_usage) usageTotals = s.bat_usage;
+    // Merge over the default rather than assigning outright: a session
+    // persisted before `billable` existed would restore it as `undefined`,
+    // and undefined - undefined is NaN — NaN >= RUN_TOKEN_BUDGET is always
+    // false, so the budget check would silently never fire again for that
+    // panel until the chat was cleared.
+    if (s.bat_usage) usageTotals = { prompt: 0, completion: 0, requests: 0, billable: 0, ...s.bat_usage };
     if (Array.isArray(s.bat_debug)) debugLog = s.bat_debug;
     restoringUi = true;
     for (const e of s.bat_ui || []) {
@@ -2339,7 +2354,7 @@ function clearChat() {
   debugLog = [];
   currentRunId = null;
   uiLog = [];
-  usageTotals = { prompt: 0, completion: 0, requests: 0 };
+  usageTotals = { prompt: 0, completion: 0, requests: 0, billable: 0 };
   chrome.storage.session.remove(['bat_session', 'bat_goal', 'bat_ui', 'bat_usage', 'bat_debug'])
     .catch((e) => debugEntry('clear_session_failed', { error: e?.message }));
   chatEl.innerHTML = '';
@@ -3305,6 +3320,16 @@ const apiCtx = {
     usageTotals.prompt += usage.prompt_tokens || 0;
     usageTotals.completion += usage.completion_tokens || 0;
     usageTotals.requests++;
+    // RUN_TOKEN_BUDGET tracks `billable`, not raw prompt+completion — see
+    // where it's read in runAgentLoop for why. Prefer DeepSeek's own reported
+    // prompt_cache_miss_tokens; fall back to deriving it from cached_tokens
+    // if only that's present; if NEITHER is reported (a provider/response
+    // with no cache info at all), fail safe and count the full prompt rather
+    // than silently treating unknown-cache-status tokens as free.
+    const cacheHit = usage.prompt_tokens_details?.cached_tokens ?? usage.prompt_cache_hit_tokens;
+    const cacheMiss = usage.prompt_cache_miss_tokens
+      ?? (cacheHit != null ? (usage.prompt_tokens || 0) - cacheHit : usage.prompt_tokens || 0);
+    usageTotals.billable += Math.max(0, cacheMiss) + (usage.completion_tokens || 0);
     updateDebugStatus();
   }
 };

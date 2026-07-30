@@ -26,7 +26,15 @@ export const MAX_STEPS = 200;
 // (CDP capture, base64 in session, screenshot tool) stays off until this flips.
 export const VISION_SUPPORTED = false;
 
-// Hard token ceiling for one interactive conversation turn-loop, warning at 80%.
+// Hard ceiling for one interactive conversation turn-loop, warning at 80%.
+// Measured in BILLABLE tokens (non-cached prompt + completion), not raw
+// prompt+completion — see onUsage in sidepanel/app.js. DeepSeek resends the
+// whole growing conversation every step and reports the same repeated prefix
+// as prompt_tokens whether or not it was a cache hit (billed at roughly
+// 1/10th–1/100th the cache-miss rate), so a raw-token ceiling would measure
+// "how long this conversation has gotten" more than real cost, and
+// increasingly penalize exactly the long, many-step bulk-collection runs
+// this project exists for as the cached prefix grows.
 export const RUN_TOKEN_BUDGET = 400000;
 
 // Separate pool for a background collection run: its only model spend is
