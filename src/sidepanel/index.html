@@ -111,6 +111,64 @@
     }
     .settings-status { font-size: 11px; color: var(--muted); }
     .settings-status.ok { color: #16a34a; }
+    .settings-status.warn { color: #b45309; }
+    .settings-checkbox {
+      display: flex; align-items: flex-start; gap: 6px;
+      font-size: 11px; color: var(--muted); line-height: 1.4;
+    }
+    .settings-checkbox input { flex: 0 0 auto; margin-top: 1px; }
+
+    /* Stored-data manager — the agent accumulates IndexedDB state (collections,
+       cached extractors, runs) that used to be invisible and undeletable. */
+    .datapanel {
+      position: absolute; inset: 0; z-index: 20;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+    }
+    .datapanel[hidden] { display: none; }
+    .datapanel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .datapanel-body { flex: 1; overflow-y: auto; padding: 12px 16px; font-size: 12px; }
+    .data-section { margin-bottom: 18px; }
+    .data-section > h3 {
+      margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .data-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .data-row:last-child { border-bottom: none; }
+    .data-main { flex: 1; min-width: 0; }
+    .data-name {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      word-break: break-all;
+    }
+    .data-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .data-empty { color: var(--muted); font-style: italic; }
+    .btn-mini {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-mini:hover { background: #f5f5f5; }
+    .btn-mini.danger { color: #b91c1c; border-color: #fecaca; }
+    .btn-mini.danger:hover { background: #fef2f2; }
+    .data-src {
+      margin-top: 6px; padding: 6px 8px; background: #fafafa;
+      border: 1px solid var(--border); border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+      white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto;
+    }
+    .btn-allow {
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-allow:hover { background: #fef3c7; }
+    .btn-allow[hidden] { display: none; }
 
     .message.assistant.streaming { opacity: 0.85; }
 
@@ -333,16 +391,33 @@
     </div>
     <div class="settings-status" id="keyStatus"></div>
     <label class="settings-label" for="allowedSitesInput">Allowed sites for page actions</label>
-    <textarea id="allowedSitesInput" rows="3" placeholder="one domain per line, e.g. myLMS.com&#10;leave empty to allow all sites"></textarea>
+    <textarea id="allowedSitesInput" rows="3" placeholder="one domain per line, e.g. myLMS.com&#10;empty = no page actions anywhere"></textarea>
     <div class="settings-row">
       <button class="btn-ghost" id="saveSitesBtn">Save sites</button>
       <span class="settings-status" id="sitesStatus"></span>
     </div>
+    <label class="settings-checkbox">
+      <input type="checkbox" id="allowAllToggle">
+      <span>Allow <strong>all</strong> sites (unrestricted — clicking, typing and page code run anywhere you point it)</span>
+    </label>
     <label class="settings-label">Workspace folder (agent file storage)</label>
     <div class="settings-row">
       <button class="btn-ghost" id="workspaceBtn">Choose folder</button>
       <span class="settings-status" id="workspaceStatus"></span>
     </div>
+    <label class="settings-label">Stored data</label>
+    <div class="settings-row">
+      <button class="btn-ghost" id="dataBtn">Manage stored data</button>
+      <span class="settings-status" id="dataStatus"></span>
+    </div>
+  </div>
+
+  <div class="datapanel" id="dataPanel" hidden>
+    <div class="datapanel-head">
+      <strong>Stored data</strong>
+      <button class="btn-ghost" id="dataCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="datapanel-body" id="dataBody"></div>
   </div>
 
   <div class="chat" id="chat" role="log"></div>
@@ -353,6 +428,7 @@
       <button class="btn-send" id="sendBtn" title="Send">↑</button>
     </div>
     <div class="input-row">
+      <button class="btn-allow" id="allowCurrentBtn" hidden>Allow this site</button>
       <button class="btn-stop" id="stopBtn" title="Stop">■ Stop</button>
       <span class="hint" id="modelHint">Ask anything · Say "complete this course" to control page</span>
     </div>
