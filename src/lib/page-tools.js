@@ -62,8 +62,19 @@
           if (!label || label.length < 3) continue;
           const lower = label.toLowerCase();
           if (!lower.includes(needle)) continue;
+          // Mint a ref so this hit is actionable — a match the model can't
+          // click just costs it a wasted re-read turn.
+          let ref = window.__batElementReverseMap?.get(el) || null;
+          if (!ref) {
+            window.__batRefCounter = window.__batRefCounter || 0;
+            ref = 'ref_' + (++window.__batRefCounter);
+            window.__batElementMap = window.__batElementMap || {};
+            window.__batElementMap[ref] = (typeof WeakRef === 'function') ? new WeakRef(el) : el;
+            window.__batElementReverseMap?.set(el, ref);
+            try { el.setAttribute('data-ext-ref', ref); } catch (_) {}
+          }
           hits.push({
-            ref: null,
+            ref,
             label: label.slice(0, 140),
             role: el.getAttribute('role') || el.tagName.toLowerCase(),
             frameUrl: location.href
@@ -74,7 +85,9 @@
       return hits;
     }, [needle, maxResults]);
 
-    return (results || []).flatMap(r => r.result || []);
+    // Keep the frameId — refs are frame-LOCAL; the caller maps them into the
+    // global ref space the model uses.
+    return (results || []).flatMap(r => (r.result || []).map(h => ({ ...h, frameId: r.frameId })));
   }
 
   async function getEnrichedPageText(tabId, maxChars = 12000) {

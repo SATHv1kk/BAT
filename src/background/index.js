@@ -2,7 +2,25 @@
 // The panel fetches through here because the service worker is not subject to
 // the side panel's page CSP and survives panel close/reopen mid-request.
 
-const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions';
+import { DEEPSEEK_API, API_TIMEOUT_MS } from '../shared/constants.js';
+import './runner.js'; // plan runner: background collection runs (state machine + watchdog)
+import { fetchBoard, discoverBoard } from '../lib/ats-adapters.js';
+
+// ATS fetches run HERE because the panel CSP blocks cross-origin fetch.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== 'BAT_ATS_CMD') return false;
+  (async () => {
+    try {
+      const res = message.cmd === 'discover'
+        ? await discoverBoard(message.provider, message.company)
+        : await fetchBoard(message.provider, message.slug);
+      sendResponse(res);
+    } catch (e) {
+      sendResponse({ ok: false, error: e.message });
+    }
+  })();
+  return true;
+});
 
 // Sourced from the manifest so the bundled path can't drift out of sync.
 const SIDE_PANEL_PATH = chrome.runtime.getManifest().side_panel.default_path;
@@ -23,20 +41,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     console.error('BAT open-sidepanel:', err);
   }
 });
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
-    try {
-      await chrome.sidePanel.setOptions({
-        tabId,
-        path: SIDE_PANEL_PATH,
-        enabled: true
-      });
-    } catch (_) {}
-  }
-});
-
-const API_TIMEOUT_MS = 180000;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'BAT_DEEPSEEK_API') return false;

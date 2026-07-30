@@ -96,6 +96,13 @@
     debuggerAttached.delete(source.tabId);
   });
 
+  // Per-tab buffers and attachment state must not outlive the tab.
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    tabMonitors.delete(tabId);
+    debuggerAttached.delete(tabId);
+    cancelIdleWait(tabId);
+  });
+
   chrome.debugger.onEvent.addListener((source, method, params) => {
     const m = tabMonitors.get(source.tabId);
     if (!m) return;
@@ -220,6 +227,35 @@
     });
   }
 
+  // Adaptive settle: resolve when the DOM has been quiet for quietMs, capped at
+  // maxMs — beats fixed sleeps on both fast and slow pages.
+  async function waitForDomQuiet(tabId, { quietMs = 250, maxMs = 600 } = {}) {
+    try {
+      await executeScript({ tabId }, (quietMs, maxMs) => new Promise((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          obs.disconnect();
+          resolve(true);
+        };
+        const obs = new MutationObserver(() => {
+          clearTimeout(quietTimer);
+          quietTimer = setTimeout(done, quietMs);
+        });
+        // No `attributes`: JS animations/carousels churn attributes forever and
+        // would pin every wait at maxMs. Content settling is childList/text.
+        obs.observe(document.documentElement || document, {
+          childList: true, subtree: true, characterData: true
+        });
+        let quietTimer = setTimeout(done, quietMs);
+        setTimeout(done, maxMs);
+      }), [quietMs, maxMs]);
+    } catch (_) {
+      await delay(250);
+    }
+  }
+
   async function getViewportCenter(tabId) {
     const results = await executeScript(
       { tabId },
@@ -249,8 +285,36 @@
       window.scrollBy(0, dy);
       return { scrolled: true };
     }, [delta]);
-    await delay(400);
+    await delay(250);
     return { success: true, detail: 'scrolled ' + direction + ' (DOM)' };
+  }
+
+  // Scroll to the bottom repeatedly until the page height stops growing — for
+  // infinite-scroll/lazy-loaded result lists that must be fully loaded before
+  // reading. Caps at maxRounds so a true infinite feed can't trap the loop.
+  async function scrollToEnd(tabId, { maxRounds = 12, settleMs = 500 } = {}) {
+    let lastHeight = -1;
+    let stable = 0;
+    let rounds = 0;
+    for (; rounds < maxRounds; rounds++) {
+      const results = await executeScript({ tabId }, () => {
+        const el = document.scrollingElement || document.documentElement;
+        el.scrollTop = el.scrollHeight;
+        return { height: el.scrollHeight };
+      });
+      await delay(settleMs);
+      const h = results?.[0]?.result?.height ?? 0;
+      if (h === lastHeight) {
+        if (++stable >= 2) break;
+      } else {
+        stable = 0;
+        lastHeight = h;
+      }
+    }
+    return {
+      success: true,
+      detail: `scrolled to bottom (${rounds + 1} pass(es), final height ${lastHeight}px${rounds + 1 >= maxRounds ? ' — hit round cap, list may load more' : ''})`
+    };
   }
 
   async function cdpClick(tabId, x, y, onCursor, opts = {}) {
@@ -503,7 +567,11 @@
     if (result?.__bat_error) return { success: false, error: result.__bat_error };
     let detail;
     try { detail = JSON.stringify(result); } catch { detail = String(result); }
-    return { success: true, detail: (detail ?? String(result)).slice(0, 500) };
+    detail = detail ?? String(result);
+    if (detail.length > 4000) {
+      detail = detail.slice(0, 4000) + `…[truncated — full result was ${detail.length} chars; save large data with save_file]`;
+    }
+    return { success: true, detail };
   }
 
   async function typeIntoRef(tabId, frameId, localRef, text, clickFirst) {
@@ -556,6 +624,7 @@
   window.BrowserTools = {
     delay,
     waitForPageIdle,
+    waitForDomQuiet,
     cdpClick,
     cdpScroll,
     cdpKey,
@@ -564,6 +633,7 @@
     readNetwork,
     clickRef,
     scrollToRef,
+    scrollToEnd,
     formSetRef,
     runJavaScript,
     domScroll,
@@ -589,7 +659,7 @@
         try {
           const delta = direction === 'up' ? -500 : 500;
           await cdpScroll(tabId, delta);
-          await delay(400);
+          await delay(250);
           return { success: true, detail: 'scrolled ' + direction + ' (CDP)' };
         } catch (e) {
           return { success: false, error: e.message || 'scroll failed' };

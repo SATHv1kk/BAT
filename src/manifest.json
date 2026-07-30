@@ -6,7 +6,7 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "permissions": ["sidePanel", "activeTab", "scripting", "storage", "tabs", "debugger", "webNavigation"],
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage", "tabs", "debugger", "webNavigation", "alarms"],
   "host_permissions": ["<all_urls>", "https://api.deepseek.com/*"],
   "action": {
     "default_title": "BAT",

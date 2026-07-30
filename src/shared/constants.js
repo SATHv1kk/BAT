@@ -13,6 +13,21 @@ export const MODEL_OPTIONS = [
 
 export const MAX_STUCK = 8;
 export const MAX_STEPS = 200;
+
+// DeepSeek's chat API does not accept image input — the whole screenshot path
+// (CDP capture, base64 in session, screenshot tool) stays off until this flips.
+export const VISION_SUPPORTED = false;
+
+// Hard token ceiling for one interactive conversation turn-loop, warning at 80%.
+export const RUN_TOKEN_BUDGET = 400000;
+
+// Separate pool for a background collection run: its only model spend is
+// extractor synthesis, so this bounds "how many sites may I learn" rather than
+// "how long may I converse".
+export const RUNNER_TOKEN_BUDGET = 300000;
+
+// Extractor synthesis is the strong-model case; routine work is not.
+export const SYNTHESIS_MODEL = 'deepseek-v4-pro';
 export const FOCUS_TREE_CHARS = 14000;
 export const FOCUS_QUIZ_TREE_CHARS = 12000;
 export const FOCUS_TEXT_CHARS = 5000;
