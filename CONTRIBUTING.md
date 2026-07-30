@@ -55,12 +55,35 @@ Do a `get`, mutate, and `put` in the **same** transaction, and `await` its `onco
 both read the old value and the second write wins. Do not `await` anything unrelated
 between requests inside a transaction; it will auto-commit under you.
 
+When batching genuinely needs two phases (`addRows` in `state-store.js` reads N point
+lookups in one transaction, computes in memory, then writes in a second — issuing N gets
+one at a time in a single read-modify-write transaction would `await` between requests and
+auto-commit under you), the two-transaction split is unavoidable, and the fallback is to
+serialize same-process callers around it instead: a per-key lock (`withCollectionLock` /
+`withFileLock`), same idea in both `state-store.js` and `workspace.js`. Know its limit —
+it only serializes callers in the SAME script context. The side panel and the background
+service worker each load their own instance of a module with their own lock, so it does not
+stop a panel call and a worker call racing on the same key from different contexts. Closing
+that fully needs the read and write folded into one transaction (`recordNotFound` shows the
+pattern) — don't attempt that blind; verify it against a live extension, since getting IDB
+transaction lifetime wrong (auto-commit mid-`await`) is worse than the race it would fix.
+
 ### Budgets are phase-aware
 
 `background/runner.js` gives navigation+extraction one budget and extractor synthesis
 (a model call) a much larger one, via a re-armable deadline. If you add a phase whose
 honest cost differs by an order of magnitude, re-arm rather than inherit — a single flat
 timer is what once made synthesis impossible to complete.
+
+A timed-out phase does not stop `processPage` — it only makes `Promise.race` return early;
+the abandoned call keeps running in the background against a tab the loop has already
+moved on to navigating elsewhere. The `stop()` checkpoints exist to bail out of THAT
+call before it mutates shared state on a page it no longer belongs to. Every write to
+`Store.putExtractor` — cache a fresh extractor, retire or halt a stale one — needs a
+`stop()` immediately before it, same as the row-write path already had. Synthesis is the
+one deliberate exception: its commit is intentionally NOT gated the same way, so a slow
+model call still banks the (expensive, already-validated) result instead of throwing it
+away — see the comment at its call site before "fixing" that one.
 
 ### Errors get breadcrumbs
 

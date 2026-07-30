@@ -349,11 +349,25 @@
 
         // Never descend into a sensitive <select> — its children are the values.
         var sensitiveSelect = el.tagName.toLowerCase() === 'select' && isSensitive(el);
-        if (!sensitiveSelect && el.children && level < maxDepth) {
-          for (var c = 0; c < el.children.length; c++) {
-            // Indent only advances past elements we actually emitted, so layout
-            // wrapper divs do not push the whole tree to the right.
-            walk(el.children[c], included ? level + 1 : level);
+        if (!sensitiveSelect && level < maxDepth) {
+          if (el.children) {
+            for (var c = 0; c < el.children.length; c++) {
+              // Indent only advances past elements we actually emitted, so layout
+              // wrapper divs do not push the whole tree to the right.
+              walk(el.children[c], included ? level + 1 : level);
+            }
+          }
+          // An OPEN shadow root hosts its own child tree that a plain
+          // el.children walk never sees — increasingly common in component
+          // libraries (Web Components, many design systems' custom elements).
+          // Without this, every control inside one is silently invisible: not
+          // filtered out, just never reached. A CLOSED shadow root has no
+          // JS-reachable API at all (that is the point of "closed"); nothing
+          // short of CDP's Accessibility domain can see inside one.
+          if (el.shadowRoot && el.shadowRoot.children) {
+            for (var sc = 0; sc < el.shadowRoot.children.length; sc++) {
+              walk(el.shadowRoot.children[sc], included ? level + 1 : level);
+            }
           }
         }
       }

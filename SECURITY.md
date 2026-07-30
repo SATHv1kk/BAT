@@ -64,7 +64,9 @@ DOM reader, refusing:
 | --- | --- |
 | Network egress | `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon` |
 | Credential surfaces | `document.cookie`, `localStorage`, `sessionStorage`, `indexedDB`, `caches`, `navigator.credentials` |
-| Dynamic code | `eval`, `new Function`, `import()`, `importScripts` |
+| Dynamic code | `eval` (including `window.eval`), `Function(...)` (with or without `new`), `import()`, `importScripts` |
+| Prototype-chain / receiver escapes | `.constructor` (the standard non-keyword route to `Function`), bare `this` (a function built this way and called with no receiver runs with `this` bound to the global object) |
+| Dynamic global access | bracket/computed access on `window`/`self`/`globalThis`/`top`/`parent`/`frames` |
 | Extension APIs | any `chrome.*` |
 | Deferred execution | `setTimeout`, `setInterval`, `requestIdleCallback`, `Worker` |
 | Acting, not reading | `.click()`, `.submit()`, `window.open`, `location.href =`, `document.write`, `postMessage` |
@@ -72,6 +74,14 @@ DOM reader, refusing:
 Screening runs in the panel, in the runner, and again inside `runExtractor` — three call
 sites, one policy, so no path can skip it. Rejected source is surfaced to you in full and
 logged. Covered by `test/extractor-screen.test.mjs`.
+
+The "prototype-chain / receiver escapes" and "dynamic global access" rows exist because a
+keyword denylist can't be closed one spelling at a time: `(fn).constructor` reaches
+`Function` without ever containing the text "Function" or "eval", and a function compiled
+by `new Function(src)`/`Function(src)` and invoked with no receiver — exactly how the
+extractor runner calls it — has `this` bound to the global object, so bare `this` reaches
+`fetch`/`document`/`eval` without naming any of them. Closing these still leaves the screen
+a denylist, not a sandbox.
 
 This is a denylist, and a denylist over source text is not a sandbox. It raises the cost of
 an injected extractor substantially and makes the attempt visible; it is not a proof of

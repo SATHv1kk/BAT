@@ -51,6 +51,29 @@ export default function run(t) {
   // A method merely NAMED eval-ish must not trip the rule.
   t('obj.evaluate() is not eval', ok('return [{T: document.evaluate ? "y" : "n"}];'));
 
+  // ── sandbox-escape bypasses (previously slipped past every rule above) ──
+  // Function(...) without `new` constructs a function identically to `new
+  // Function(...)` — omitting the keyword used to sail straight through.
+  t('bare Function() denied', denied('var f = Function("return fetch"); f()("https://evil"); return [];'));
+  // window.eval IS the global eval; the old rule's dot-exclusion (meant to
+  // spare a custom .evaluate()-style method) exempted this alias by accident.
+  t('window.eval denied', denied('window.eval("1"); return [];'));
+  t('self.eval denied', denied('self.eval("1"); return [];'));
+  // The classic prototype-chain route to Function that never spells "Function"
+  // or "eval" anywhere in the source.
+  t('.constructor.constructor Function-escape denied', denied('var f=(function(){}).constructor("return fetch")(); return [];'));
+  t('bare .constructor denied even without the escape completed', denied('return [{T: [].constructor.name}];'));
+  // A function built by new Function()/Function() and called with no receiver
+  // (exactly how extractInPage invokes it) runs with `this` bound to the
+  // global object — bare `this` reaches fetch/document/eval with no banned
+  // identifier anywhere in the source.
+  t('bare this denied', denied('return [{T: this.document.title}];'));
+  t('this via IIFE denied', denied('var g = (function(){ return this; })(); return [{T: g.fetch ? "y" : "n"}];'));
+  // Escaping identifier matching via computed/bracket access to a global.
+  t('window bracket access denied', denied('var f = window["fetch"]; return [];'));
+  t('self bracket access denied', denied('var f = self["eval"]; return [];'));
+  t('globalThis bracket access denied', denied('var f = globalThis["fetch"]; return [];'));
+
   // ── extension API reach ──
   t('chrome.runtime denied', denied('chrome.runtime.sendMessage({}); return [];'));
   t('chrome.storage denied', denied('chrome.storage.local.get("deepseek_key"); return [];'));

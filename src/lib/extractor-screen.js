@@ -18,6 +18,17 @@
 // intentional: a denied token appearing inside a string is itself suspicious
 // enough to re-synthesize over, and stripping literals first would just move the
 // arms race into the stripper.
+//
+// A token denylist over source text is fundamentally not a sandbox — it can
+// only refuse spellings it was told about. Two rules below (`.constructor` and
+// bare `this`) exist specifically to close the general escape routes rather
+// than one keyword at a time: `(fn).constructor` reaches the Function
+// constructor without ever naming "Function" or "eval", and a function built
+// by `new Function(src)` and invoked with no receiver (exactly how
+// extractInPage calls it) runs with `this` bound to the global object, so bare
+// `this` hands over fetch/document/eval with no banned identifier in sight.
+// Closing both still leaves this a denylist, not a proof of containment — the
+// allowlist above it is the real boundary (see SECURITY.md).
 const DENIED = [
   { re: /\bfetch\s*\(/,                          why: 'network access (fetch)' },
   { re: /\bXMLHttpRequest\b/,                    why: 'network access (XMLHttpRequest)' },
@@ -26,8 +37,31 @@ const DENIED = [
   { re: /\bnavigator\s*\.\s*sendBeacon\b/,       why: 'network access (sendBeacon)' },
   { re: /\bimport\s*\(/,                         why: 'dynamic code loading (import())' },
   { re: /\bimportScripts\b/,                     why: 'dynamic code loading (importScripts)' },
-  { re: /\bnew\s+Function\b/,                    why: 'dynamic code generation (new Function)' },
-  { re: /(^|[^.\w])eval\s*\(/,                   why: 'dynamic code evaluation (eval)' },
+  // Bare `Function(...)` constructs a function exactly like `new Function(...)`
+  // does — the `new` keyword is optional in JS, so requiring it here let
+  // `Function("return fetch")()` sail straight through. Match the call, not the
+  // keyword.
+  { re: /\bFunction\s*\(/,                       why: 'dynamic code generation (Function constructor)' },
+  // Matching only "not preceded by a dot" was meant to spare a custom object's
+  // own `.evaluate()`/`.eval()` method, but it also exempted `window.eval(...)`
+  // — which IS the global eval, reachable through the one alias this rule
+  // happened to whitelist. There is no legitimate reason a DOM-reading
+  // extractor calls anything named eval, dotted or not.
+  { re: /\beval\s*\(/,                           why: 'dynamic code evaluation (eval)' },
+  // `(fn).constructor` (→ Function) and `(fn).constructor.constructor` are the
+  // standard prototype-chain routes to the Function constructor that never
+  // spell "Function" or "eval" at all. An extractor has no legitimate reason
+  // to touch .constructor.
+  { re: /\.\s*constructor\b/,                    why: 'prototype-chain access (.constructor) — a common sandbox-escape route' },
+  // A function compiled via new Function()/Function() and invoked with no
+  // receiver (exactly how extractInPage calls it) runs with `this` bound to
+  // the global object — so bare `this` hands over fetch/document/eval etc.
+  // without naming any of them. An extractor takes no arguments and has no
+  // receiver, so it never legitimately needs `this`.
+  { re: /\bthis\b/,                              why: 'reference to `this` — resolves to the global object here and is not needed to read the DOM' },
+  // Escaping identifier-based matching by indexing the global object
+  // dynamically, e.g. window['fetch'] or self['ev'+'al'].
+  { re: /\b(?:window|self|globalThis|top|parent|frames)\s*\[/, why: 'dynamic property access on a global object (bracket notation)' },
   { re: /\bdocument\s*\.\s*cookie\b/,            why: 'credential access (document.cookie)' },
   { re: /\b(?:local|session)Storage\b/,           why: 'credential access (web storage)' },
   { re: /\bindexedDB\b/,                         why: 'credential access (IndexedDB)' },

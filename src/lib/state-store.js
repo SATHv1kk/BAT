@@ -98,10 +98,45 @@ export function dedupKeyFor(row, fields) {
   }).join('|');
 }
 
+// addRows reads the meta counters (seq/count/merged) in one transaction, then
+// writes them in a SECOND one (see the comment above Phase 1 below for why
+// they can't be merged into one). CONTRIBUTING.md's own rule — "one
+// transaction per read-modify-write, or two concurrent callers can both read
+// the old value and the second write wins" — is exactly the hole this leaves:
+// two overlapping addRows() calls for the SAME collection can each read the
+// same counters and the second commit clobbers the first's increment. The
+// individual ROW records are unaffected (distinct dedup keys never collide),
+// but the "authoritative" count data_report/run_control report promise can
+// silently under-count.
+//
+// Serializing here — the same fix workspace.js uses for the identical race on
+// file writes — closes this for the common case: two background runs (or two
+// rapid interactive collect_rows calls) sharing one output file, all running
+// in the SAME script context, so they share this module's in-memory lock.
+// It does NOT reach across contexts: the side panel and the background
+// service worker each load their own instance of this module with their own
+// lock, so a run and an interactive collect_rows racing on the same filename
+// from DIFFERENT contexts at the same instant is a narrower residual case —
+// closing that fully needs the meta read+write folded into one IndexedDB
+// transaction (recordNotFound does this), which needs verifying against a
+// live extension rather than guessed at, since getting IDB transaction
+// lifetime wrong (auto-commit mid-await) is worse than the bug it would fix.
+const collectionLocks = new Map();
+function withCollectionLock(collection, fn) {
+  const prev = collectionLocks.get(collection) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  collectionLocks.set(collection, run.then(() => {}, () => {}));
+  return run;
+}
+
 // Insert rows with dedup. On collision the FIRST record wins; the new row's
 // source is merged into the existing record's source list. Returns the fresh
 // (novel) records in insertion order plus the merge count.
-export async function addRows(collection, rows, { dedupFields, sourceField = 'source' } = {}) {
+export async function addRows(collection, rows, opts = {}) {
+  return withCollectionLock(collection, () => addRowsUnlocked(collection, rows, opts));
+}
+
+async function addRowsUnlocked(collection, rows, { dedupFields, sourceField = 'source' } = {}) {
   if (!Array.isArray(dedupFields) || !dedupFields.length) {
     throw new Error('dedupFields is required, e.g. ["company", "title"]');
   }

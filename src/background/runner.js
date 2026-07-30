@@ -348,6 +348,16 @@ async function processPage(run, unit, budget = { token: { cancelled: false }, ar
     if (check.verdict === 'empty') return { outcome: 'empty', rowsFound: 0, synthesized };
   } else {
     exec = await runExtractorInTab(tabId, record.current.source);
+    // Unlike synthesis (a one-time model call the loop deliberately banks even
+    // on a late timer), a replay is supposed to be near-instant — "zero model
+    // calls per page". If it wasn't, and the page budget already expired while
+    // it ran, the tab may already belong to the NEXT page by the time we get
+    // here (the loop moved on and started navigating as soon as the timer
+    // fired). Committing a pass/fail verdict computed against a page that is
+    // no longer the one we think it is would wrongly retire — or after a
+    // second such race, HALT — a perfectly healthy extractor. Bail before
+    // mutating the cache.
+    stop();
     const check = exec.ok
       ? Extractors.validateReplay({
           rows: exec.rows,

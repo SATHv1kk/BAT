@@ -13,6 +13,9 @@ the Chrome DevTools Protocol — so pages react exactly as they would to a real 
 
 - **Side panel UI** — chat alongside any page, no separate window.
 - **Accessibility-tree page reading** — compact, structured page state instead of raw HTML.
+  Walks into open shadow roots too, so Web Components (common in modern design systems)
+  aren't invisible — a closed shadow root has no JS-reachable API at all, by design, so
+  that one genuinely can't be read from script.
 - **Trusted input via CDP** — real click and keyboard events, not synthetic DOM events.
 - **Phantom cursor** — a visible pointer shows what the agent is about to touch.
 - **Coordinate fallback** — for canvas-rendered pages with no useful DOM, the agent reads
@@ -77,9 +80,11 @@ the Chrome DevTools Protocol — so pages react exactly as they would to a real 
   cached extractor (with its source), and run, and lets you inspect or delete any of
   them, plus pause/resume runs without going through the agent.
 
-## Install
+## Quick start
 
-Requires [Node.js](https://nodejs.org/) 18 or newer.
+Six steps from a clone to BAT clicking something for you.
+
+**1. Build it.** Requires [Node.js](https://nodejs.org/) 18 or newer.
 
 ```bash
 git clone https://github.com/SATHv1kk/BAT.git
@@ -88,27 +93,41 @@ npm install
 npm run build
 ```
 
-Then load it into Chrome:
+**2. Load it into Chrome.**
 
 1. Go to `chrome://extensions`.
 2. Enable **Developer mode** (top right).
 3. Click **Load unpacked** and select the generated `dist/` folder.
+   (`dist/` is a build artifact and is not committed — run `npm run build` again after
+   every `git pull`.)
 4. Open the panel with the toolbar icon or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>
    (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> on macOS).
 
-`dist/` is a build artifact and is not committed — run `npm run build` after pulling.
+**3. Set your API key.** BAT talks to the [DeepSeek API](https://platform.deepseek.com/api_keys).
+The panel opens Settings automatically on first run — paste your key there. It is stored
+in `chrome.storage.local` on your machine and is never sent anywhere except the DeepSeek
+API.
+
+**4. Approve a site.** The allowlist is empty on a fresh install and **fails closed**: BAT
+can read any page, but it cannot click, type, or run page code anywhere until you say so.
+Open the site you want it to act on, then either:
+
+- click the **Allow \<site\>** button that appears above the composer, or
+- add the domain under Settings (⚙) → *Allowed sites*.
+
+(There's an *Allow all sites* toggle for the unrestricted old behaviour — it's off by
+default on purpose; see [Security model](#security-model) for why.)
+
+**5. Try it.** With a site approved, type a goal in plain language and press Enter, e.g.
+*"summarize this page"* (works with zero setup — reading never needed approval) or, on
+an approved site, *"click the search box and type 'robotics jobs'"*. Watch the activity
+feed: each step shows what BAT read, decided, and did.
+
+**6. If nothing happens:** check the model dropdown has a key configured (send button
+stays disabled without one), and check the allowlist status line under Settings — "No
+sites are allowed" means page actions are intentionally off until you approve one.
 
 ## Configuration
-
-BAT talks to the [DeepSeek API](https://platform.deepseek.com/api_keys). On first run,
-open the panel's settings and paste your API key. It is stored in
-`chrome.storage.local` on your machine and is never committed to the repo.
-
-**Then approve a site.** The allowlist is empty on a fresh install and it fails closed:
-BAT can read pages but cannot click, type, or run page code anywhere until you approve
-an origin. Use the **Allow \<site\>** button that appears above the composer, or add
-domains under Settings → *Allowed sites*. There is an explicit *Allow all sites* toggle
-if you want the unrestricted behaviour; it is off by default on purpose.
 
 ### Models
 
@@ -147,7 +166,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 387 offline assertions — deterministic, no network. Gates CI.
+npm test           # 397 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs
@@ -268,9 +287,18 @@ returned tidy rows; it does not prove the code only *read* the page.
 So every extractor is screened before it is executed or cached. Network access
 (`fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`), credential surfaces
 (`document.cookie`, `localStorage`, `indexedDB`, `caches`), dynamic code (`eval`,
-`new Function`, `import()`), extension APIs, timers, navigation and page mutation are all
-refused. Screening happens in the panel, in the runner, and again inside
-`runExtractor` itself. Rejected source is shown to you in full.
+`Function(...)` with or without `new`, `import()`), extension APIs, timers, navigation and
+page mutation are all refused — along with the general escape routes a keyword list can't
+name one spelling at a time: `.constructor` (the standard prototype-chain path to
+`Function` that never spells "Function" or "eval"), and bare `this` (a function compiled
+this way and called with no receiver runs with `this` bound to the global object, handing
+over `fetch`/`document`/`eval` without naming any of them). Screening happens in the
+panel, in the runner, and again inside `runExtractor` itself. Rejected source is shown to
+you in full.
+
+This is still a denylist over source text, not a sandbox — it raises the cost of an
+injected extractor and makes the attempt visible, it does not prove containment. The
+allowlist above it is the real boundary.
 
 ### 3. Redaction — before anything leaves the browser
 
