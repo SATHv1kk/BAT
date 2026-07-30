@@ -573,12 +573,14 @@ export async function pauseRun(runId) {
   return { ok: true, note: 'paused — fully resumable' };
 }
 
-// Can THIS context (the service worker) actually write to the workspace folder?
-// Whether a File System Access handle stored by the panel stays writable from a
-// worker is environment-dependent, so the runner proves it up front instead of
-// discovering it mid-run — a failure means rows accumulate in the store and the
-// file only catches up via export_rows, which the user must know BEFORE a long
-// unattended run rather than after.
+// Can THIS context (the service worker) actually write files right now?
+// workspace.js falls back to embedded (IndexedDB) storage whenever a real
+// on-disk folder isn't currently granted, so this should now succeed in
+// practice even when the File System Access handle itself isn't writable
+// from a worker — but it's still proven up front rather than assumed, since
+// the whole embedded-storage path exists because "should always work" and
+// "does always work" are different claims. A failure here means rows still
+// accumulate in the store — export_rows from the panel catches the file up.
 export async function checkWorkerFileAccess() {
   const probe = 'bat-write-probe.tmp';
   try {

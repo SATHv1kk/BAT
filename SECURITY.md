@@ -164,6 +164,12 @@ the mirror has not drifted.
 - **The extension CSP** restricts `connect-src` to the API host.
 - **`DEEPSEEK_DEFAULT_KEY`** must remain empty in the repository. The debug export masks
   the key.
+- **File storage defaults to embedded (IndexedDB), not a real folder.** `save_file`/
+  `read_file`/`list_files`/`append_rows` write into `src/lib/embedded-storage.js` unless
+  the user has explicitly granted a real on-disk folder in Settings — meaning by default
+  the agent has no filesystem reach at all beyond the extension's own private storage,
+  which is already inaccessible to any page or other extension. Granting a real folder is
+  an opt-in, narrower-scoped (limited to that one folder) upgrade, never a requirement.
 
 ## Reporting a vulnerability
 

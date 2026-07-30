@@ -3302,7 +3302,12 @@ async function updateWorkspaceStatus() {
   if (!workspaceStatusEl) return;
   const s = await Workspace.getStatus();
   workspaceStatusEl.textContent = s.text;
-  workspaceStatusEl.classList.toggle('ok', s.ok);
+  // A real granted folder is "ok" (green). Embedded storage is fully
+  // functional either way — degraded (a folder WAS chosen but needs
+  // reconnecting) gets a nudge to fix it; chosen-nothing-yet gets neither
+  // color, since that's just the ordinary default, not a problem.
+  workspaceStatusEl.classList.toggle('ok', s.ok && !s.embedded);
+  workspaceStatusEl.classList.toggle('warn', !!s.degraded);
 }
 
 if (workspaceBtn) {

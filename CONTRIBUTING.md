@@ -24,6 +24,26 @@ Consequences: never report a total from the model's memory — read it back with
 `data_report` / `getCounts`. Never treat a failed file write as data loss; the rows are
 safe and `export_rows` reconciles.
 
+### File writes never hard-fail on a missing/lapsed folder grant
+
+`workspace.js`'s `getWorkspaceDir()` never throws. It prefers a real on-disk folder while
+its File System Access permission is currently `granted`, and falls back to
+`embedded-storage.js` (IndexedDB, no OS permission, never expires) otherwise — a real
+folder's grant is not reliably persistent across browser restarts and extension reloads,
+and a long collection job must never stall on a re-authorization dialog mid-run.
+
+Consequence for anyone touching this path: `output-writer.js` and `workspace.js`'s own
+read/write/list/remove functions must keep working against BOTH backends without knowing
+which one is live — that's what the duck-typed subset of the FileSystemDirectoryHandle
+API in `embedded-storage.js` (`getFileHandle`/`entries`/`removeEntry`, file handles with
+`getFile`/`createWritable`) exists to guarantee. If you add a new file operation, test it
+against `embedded-storage.js` via `fake-indexeddb` (see
+`test/workspace-integration.test.mjs`) — a real browser is not needed to catch a shape
+mismatch here, and one already was: `getFileHandle(name, {create:true})` on a
+not-yet-existing name must materialize an empty record immediately, matching how a real
+folder creates a zero-byte file the instant it's asked to, or the very next `getFile()`
+call throws where a real handle would have returned size 0.
+
 ### The allowlist fails closed
 
 An empty allowlist permits **nothing** that changes a page or runs code. If you add a tool

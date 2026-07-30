@@ -69,7 +69,7 @@ flowchart TB
 
     DeepSeek[("DeepSeek API")]
     Store[("IndexedDB<br/>rows · extractors · runs")]
-    FS[("Workspace folder<br/>File System Access API")]
+    FS[("Embedded storage (default)<br/>+ optional real folder")]
     Boards[("Greenhouse / Lever /<br/>Ashby / Workable JSON APIs")]
 
     Dispatch -- "chrome.scripting.executeScript" --> A11y
@@ -163,8 +163,8 @@ CAPTCHAs and login walls are **detected, never solved** — the run parks in
 | Model | **[DeepSeek](https://platform.deepseek.com/) chat completions API** — native function calling, streaming, reasoning-effort control | The reasoning/cost tier this project targets; the transport layer (`sidepanel/deepseek.js`) is provider-shaped but not provider-agnostic today (see [Configuration](#configuration)). |
 | Extractor safety | **[acorn](https://github.com/acornjs/acorn) + [acorn-walk](https://github.com/acornjs/acorn)** | Parses model-authored `extract_rows` source into a real AST so alias tracking (`var w = window; w.fetch(...)`) can be checked structurally, not by text pattern. |
 | Regex safety | **[safe-regex](https://github.com/substack/safe-regex)** (backed by **regexp-tree**) | Gates every model-authored regex (plan rules, filters) against catastrophic backtracking before it ever reaches `new RegExp`. |
-| Persistence | **IndexedDB** (rows/dedup, cached extractors, runs, event log) · **File System Access API** (workspace folder) · `chrome.storage.local` (settings) · `chrome.storage.session` (chat transcript) | The store is the authority for collected data; output files are a projection of it, never the other way round. |
-| Quality gates | **ESLint** (flat config) · a from-scratch Node test runner (`test/run-tests.mjs`, no framework dependency) · GitHub Actions CI | 459 offline, deterministic assertions gate every push; a separate scheduled job hits four live ATS endpoints so third-party drift can't redden an unrelated PR. |
+| Persistence | **IndexedDB** (rows/dedup, cached extractors, runs, event log, and — by default — file storage itself) · **File System Access API** (optional real workspace folder) · `chrome.storage.local` (settings) · `chrome.storage.session` (chat transcript) | The store is the authority for collected data; output files are a projection of it, never the other way round. File storage needs no OS permission at all by default — a real folder is an opt-in upgrade, not a requirement. |
+| Quality gates | **ESLint** (flat config) · a from-scratch Node test runner (`test/run-tests.mjs`, no framework dependency) · **fake-indexeddb** (dev-only, for real IndexedDB integration tests in Node) · GitHub Actions CI | 486 offline, deterministic assertions gate every push; a separate scheduled job hits four live ATS endpoints so third-party drift can't redden an unrelated PR. |
 
 ---
 
@@ -228,15 +228,16 @@ CAPTCHAs and login walls are **detected, never solved** — the run parks in
 
 **Persistence & operations**
 
-- **Workspace folder** — grant BAT a folder on disk (Settings → Workspace folder) and the
-  agent can save notes, collected data, and progress checkpoints as real files
-  (`save_file` / `read_file` / `list_files`) that survive restarts. Access is limited to
-  the folder you pick, and every writer shares one per-file lock. This is a genuine
-  one-time picker click — Chrome's File System Access API does not let any extension set
-  a folder silently or by path, by design — but it really is one-time: the handle is
-  stored and silently re-validated on every later launch. The repo's own
-  [`workspace/`](workspace/) folder is a ready-made, already-`.gitignore`d option if you
-  don't have a preferred location.
+- **File storage that just works, plus an optional real folder.** `save_file` / `read_file`
+  / `list_files` / `append_rows` need no setup at all — by default they write into
+  **embedded storage** (`src/lib/embedded-storage.js`), an IndexedDB-backed store fully
+  inside the extension. If you'd rather have real files on disk, grant a folder in
+  Settings → Workspace folder (the repo's own [`workspace/`](workspace/) is a ready-made,
+  already-`.gitignore`d option); BAT then prefers that folder while its permission is
+  valid, and falls back to embedded storage automatically the moment it isn't — Chrome's
+  File System Access permission grant is not reliably persistent across browser restarts
+  and extension reloads, and a data-collection job must never stall on an OS permission
+  dialog mid-run. Every writer, either backend, shares one per-file lock.
 - **Stored-data manager** — Settings → *Manage stored data* lists every collection, cached
   extractor (with its source), and run, and lets you inspect or delete any of them, plus
   pause/resume runs without going through the agent.
@@ -344,7 +345,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 459 offline assertions — deterministic, no network. Gates CI.
+npm test           # 486 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs
@@ -389,7 +390,8 @@ src/
 │   ├── regex-guard.js     Rejects catastrophic-backtracking regex before compiling it
 │   ├── state-store.js     IndexedDB: rows/dedup, runs, log, extractor cache
 │   ├── output-writer.js   TSV/CSV append-only writer (pure core is unit-tested)
-│   ├── workspace.js       File System Access folder + the shared per-file write lock
+│   ├── workspace.js       Picks real folder vs embedded storage; the shared per-file write lock
+│   ├── embedded-storage.js  IndexedDB-backed file storage — needs no OS permission, the default
 │   ├── plan.js            Plan/runner pure logic (templates, rules, state machine)
 │   ├── site-verification.js  Probe verdicts + stored-over-shipped config merge
 │   └── ats-adapters.js    Greenhouse/Lever/Ashby/Workable JSON boards
@@ -400,8 +402,11 @@ src/
     └── site-configs.js    Per-site URL templates (human-edited data)
 ```
 
-Everything under `lib/` is pure — importable and testable by plain Node, no browser
-globals — which is what makes 459 assertions possible without ever opening a browser.
+Most of `lib/` is pure — importable and testable by plain Node with no browser globals at
+all. The handful that do touch browser APIs (`workspace.js`, `embedded-storage.js`,
+`state-store.js`) are tested against a real IndexedDB via `fake-indexeddb` instead of
+requiring an actual browser — which, combined with the pure modules, is what makes 486
+assertions possible without ever opening one.
 
 ---
 
@@ -563,12 +568,15 @@ site template in `src/shared/site-configs.js` (2026-07-29):
   loads page 1, rejects error pages and empty JS shells, and catches the silent killer — a
   redirect that drops the query string, which would make every "page 2" return page 1. A
   template that merely *loads* is still not verified until `extract_rows` returns rows.
-- **Background file writing is verified at run start, not assumed.** Whether a File
-  System Access handle granted in the panel stays writable from the service worker is
-  environment-dependent, so starting a run probes it first. If the worker cannot write,
-  the run still proceeds — rows are never lost, they live in the store — but you are told
-  up front that the file only updates when you run `export_rows`, rather than discovering
-  the divergence hours later.
+- **Background file writing is verified at run start, not assumed.** Starting a run
+  probes whether the current context can actually write files before committing to a long
+  unattended job. This is now much less likely to fail than it used to be — embedded
+  storage (IndexedDB) works identically from the service worker and the panel, so a real
+  on-disk folder's File System Access permission not carrying over to the worker no longer
+  blocks anything, it just means that run's output falls back to embedded storage instead
+  of the real folder. Either way, rows are never lost (they live in the store first), and
+  if writes were falling back you're told up front rather than discovering the divergence
+  hours later.
 - **Expect AWAITING_HUMAN on LinkedIn, Indeed and Glassdoor.** They are flagged
   `account_risk` in the site configs; creating a run that targets them raises a one-time
   warning that automated collection can put the signed-in **account** at risk, not just
@@ -584,6 +592,11 @@ browser, a real folder, or a real site.
 <details>
 <summary>File persistence</summary>
 
+Embedded storage (the default — no folder chosen) is exercised automatically by
+`test/workspace-integration.test.mjs` against a real IndexedDB, so `npm test` already
+covers append/overwrite/read/list/remove there. This manual check is specifically for the
+**real on-disk folder** path, which needs an actual browser:
+
 1. Build, load `dist/`, open the panel, and pick a folder under **Settings (⚙) →
    Workspace folder**.
 2. Ask: *"Append three test rows (name, value) to test.tsv using append_rows."*
@@ -593,6 +606,9 @@ browser, a real folder, or a real site.
    count says 5. A cell containing tabs, quotes, or newlines must not break the column
    alignment. (The formatting rules themselves are unit-tested; this checks the real
    File System Access round-trip.)
+5. To check the fallback itself: revoke the folder's permission (or just don't grant one),
+   ask the agent to append a row, and confirm it succeeds via embedded storage with no
+   error — then check Settings shows "Using embedded storage" rather than a folder name.
 </details>
 
 <details>

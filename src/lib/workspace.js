@@ -1,8 +1,16 @@
-// Workspace folder — persistent on-disk files for the agent.
-// The user grants a directory once via showSaveFilePicker's sibling
-// showDirectoryPicker (a user gesture in the side panel); the handle is kept in
-// IndexedDB so it survives panel close and browser restarts. The agent then
-// reads/writes files inside that folder only — no access outside it.
+// Workspace folder — persistent file storage for the agent.
+// The user MAY grant a real directory once via showDirectoryPicker (a user
+// gesture in the side panel); the handle is kept in IndexedDB so it survives
+// panel close and browser restarts. But that grant's permission is not
+// reliably persistent across Chrome restarts/extension reloads — a real
+// platform behavior (see pickWorkspace below), not something BAT controls —
+// so every read/write here goes through getActiveDir(), which transparently
+// falls back to embedded-storage.js (IndexedDB-backed, no OS permission,
+// never expires) whenever the real folder isn't currently usable. File
+// operations therefore never hard-fail on a permission hiccup; only the
+// "real files on disk" upgrade is conditional on that grant.
+
+import { embeddedRoot } from './embedded-storage.js';
 
 const DB_NAME = 'bat-workspace';
 const STORE = 'handles';
@@ -63,6 +71,8 @@ async function loadHandle() {
 
 // Must be called from a user gesture (settings button). Re-grants permission on
 // the stored handle when possible so the user doesn't have to re-pick the folder.
+// Opting into a real folder is optional — see getActiveDir(): file tools work
+// via embedded storage with no folder set at all.
 export async function pickWorkspace() {
   const existing = await loadHandle();
   if (existing) {
@@ -81,9 +91,8 @@ export async function pickWorkspace() {
     throw new Error(
       'This Chrome build/version does not expose the folder picker inside the side panel '
       + '(a known Chrome platform limitation, not a BAT bug). Try updating Chrome to the '
-      + 'latest version (chrome://settings/help), then reload the extension. Without a '
-      + 'workspace folder, collected rows still stay safe in the extension\'s own store — '
-      + 'only writing them out to a file on disk is unavailable.'
+      + 'latest version (chrome://settings/help), then reload the extension. This only '
+      + 'affects real files on disk — the agent keeps working via embedded storage either way.'
     );
   }
   const handle = await window.showDirectoryPicker({ id: 'bat-workspace', mode: 'readwrite' });
@@ -91,32 +100,49 @@ export async function pickWorkspace() {
   return handle;
 }
 
-export async function getWorkspaceDir() {
-  return getGrantedHandle();
+// The single source of truth for which backend is live right now. Prefers a
+// real, currently-permitted folder (a deliberate user choice, and nicer —
+// actual files you can open elsewhere); falls back to embedded storage
+// whenever that isn't available, rather than throwing. This is what makes
+// file tools "always just work": nothing downstream ever needs to know or
+// care which backend answered.
+async function getActiveDir() {
+  const handle = await loadHandle();
+  if (handle) {
+    try {
+      if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') {
+        return { dir: handle, embedded: false };
+      }
+    } catch (_) { /* fall through to embedded */ }
+  }
+  return { dir: embeddedRoot, embedded: true };
 }
 
-async function getGrantedHandle() {
-  const handle = await loadHandle();
-  if (!handle) {
-    throw new Error('No workspace folder set — ask the user to pick one in Settings (⚙) → Workspace folder.');
-  }
-  const perm = await handle.queryPermission({ mode: 'readwrite' });
-  if (perm !== 'granted') {
-    throw new Error('Workspace permission expired — ask the user to click "Choose folder" in Settings (⚙) to re-grant access.');
-  }
-  return handle;
+export async function getWorkspaceDir() {
+  const { dir } = await getActiveDir();
+  return dir;
 }
 
 export async function getStatus() {
   const handle = await loadHandle();
-  if (!handle) return { ok: false, text: 'Not set — agent file tools disabled' };
+  if (!handle) {
+    return {
+      ok: true, embedded: true,
+      text: 'Using embedded storage (extension-only) — Choose folder for real files on disk instead'
+    };
+  }
   try {
     const perm = await handle.queryPermission({ mode: 'readwrite' });
-    return perm === 'granted'
-      ? { ok: true, text: `Folder: ${handle.name}` }
-      : { ok: false, text: `"${handle.name}" — click Choose folder to re-grant access` };
+    if (perm === 'granted') return { ok: true, text: `Folder: ${handle.name}` };
+    return {
+      ok: true, embedded: true, degraded: true,
+      text: `"${handle.name}" needs reconnecting — using embedded storage meanwhile (click Choose folder)`
+    };
   } catch {
-    return { ok: false, text: 'Folder unavailable — click Choose folder to pick again' };
+    return {
+      ok: true, embedded: true, degraded: true,
+      text: `"${handle.name}" unavailable — using embedded storage meanwhile (click Choose folder)`
+    };
   }
 }
 
@@ -125,7 +151,9 @@ export async function getStatus() {
 // copy the file and the LAST close() silently discards the other's data. This
 // lock used to live only in output-writer.js, so `save_file mode:"append"`
 // racing `append_rows` on the same filename lost rows with no error anywhere.
-// The lock belongs at the file layer, where every writer passes through it.
+// The lock belongs at the file layer, where every writer passes through it —
+// and it protects the embedded backend the same way, since nothing about the
+// race is specific to real files.
 const fileLocks = new Map();
 
 export function withFileLock(name, fn) {
@@ -150,7 +178,7 @@ export function writeFile(filename, content, opts = {}) {
 }
 
 async function writeFileUnlocked(name, content, { append = false } = {}) {
-  const dir = await getGrantedHandle();
+  const dir = await getWorkspaceDir();
   const fh = await dir.getFileHandle(name, { create: true });
   const position = append ? (await fh.getFile()).size : 0;
   const writable = await fh.createWritable({ keepExistingData: append });
@@ -164,7 +192,7 @@ async function writeFileUnlocked(name, content, { append = false } = {}) {
 }
 
 export async function readFile(filename) {
-  const dir = await getGrantedHandle();
+  const dir = await getWorkspaceDir();
   const fh = await dir.getFileHandle(safeName(filename));
   const text = await (await fh.getFile()).text();
   if (!text) return '(empty file)';
@@ -174,12 +202,12 @@ export async function readFile(filename) {
 }
 
 export async function removeFile(filename) {
-  const dir = await getGrantedHandle();
+  const dir = await getWorkspaceDir();
   await dir.removeEntry(safeName(filename));
 }
 
 export async function listFiles() {
-  const dir = await getGrantedHandle();
+  const dir = await getWorkspaceDir();
   const out = [];
   for await (const [name, handle] of dir.entries()) {
     if (handle.kind !== 'file') continue;
