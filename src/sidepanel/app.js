@@ -178,6 +178,8 @@ const EMPTY_QUIZ = Object.freeze({
 
 // ── DOM refs ──────────────────────────────────────────────────────
 const chatEl        = document.getElementById('chat');
+const liveStatusEl     = document.getElementById('liveStatus');
+const liveStatusTextEl = document.getElementById('liveStatusText');
 const promptInput   = document.getElementById('promptInput');
 const sendBtn       = document.getElementById('sendBtn');
 const stopBtn       = document.getElementById('stopBtn');
@@ -1654,7 +1656,7 @@ async function runTool(state, name, args, step, opts = {}) {
     ? `${name} OK${result.label ? ` — ${result.label}` : ''}${result.detail ? ` (${result.detail})` : ''}`
     : `${name} FAILED — ${result.error || 'unknown error'}${result.detail ? ` (${result.detail})` : ''}`;
 
-  addActivity(step, 'result', result.success ? 'Action succeeded' : 'Action failed', line, result.success ? 'success' : 'error');
+  addActivity(step, 'result', result.success ? 'Action succeeded' : 'Action failed', line, result.success ? 'success' : 'error', true);
   debugEntry('action_result', { step, tool: name, success: result.success, result: line });
   state.lastActionFailed = !result.success;
 
@@ -1922,7 +1924,7 @@ async function runAgentLoop(userText) {
           continue;
         }
 
-        addActivity(step, 'act', `Tool: ${name}`, summarizeArgs(args));
+        addActivity(step, 'act', `Tool: ${name}`, summarizeArgs(args), '', true);
         const skipSnapshot = PAGE_ACTION_TOOLS.has(name) && ti !== lastPageActionIdx;
         const output = await withAgentTab(state, () => runTool(state, name, args, step, { skipSnapshot }), {
           allowDeadTab: ['list_tabs', 'open_tab', 'switch_tab', 'save_file', 'read_file', 'list_files',
@@ -1978,6 +1980,7 @@ async function runAgentLoop(userText) {
     if (state.borderShown) await showAgentBorder(state.tabId, false).catch(() => {});
     agentTabIdActive = null;
     isProcessing = false;
+    hideLiveStatus();
     if (stopBtn) {
       stopBtn.disabled = false;
       stopBtn.textContent = '■ Stop';
@@ -2238,8 +2241,36 @@ function updateDebugStatus() {
   debugStatusEl.classList.remove('ok');
 }
 
-function addActivity(step, phase, title, detail, tone = '') {
+// One small, continuously-updated line instead of a permanent chat block per
+// tool call — the "act"/"result" pair fires once per tool call, so a long run
+// (the exact kind this project is built for) could fill the chat with
+// dozens of blocks before anything meaningful happened. Nothing here changes
+// what actually gets recorded: debugEntry/uiLog in addActivity below still
+// see every step in full — this only changes how the CURRENT step renders.
+function showLiveStatus(text) {
+  if (!liveStatusEl || !liveStatusTextEl) return;
+  liveStatusTextEl.textContent = text;
+  liveStatusEl.hidden = false;
+}
+
+function hideLiveStatus() {
+  if (!liveStatusEl) return;
+  liveStatusEl.hidden = true;
+}
+
+// `live` is an explicit opt-in, not inferred from phase/tone — 'act' and
+// 'result' also cover genuinely meaningful milestones (an extractor's full
+// source before it runs unattended, a running row count the user explicitly
+// asked to see after every append, "template verified"), and those must stay
+// as permanent, visible entries exactly as before. Only the two GENERIC
+// per-tool-call lines ("Tool: X" before dispatch, "Action succeeded/failed"
+// after) pass live:true — everything else is unaffected.
+function addActivity(step, phase, title, detail, tone = '', live = false) {
   const meta = ACTIVITY_PHASES[phase] || ACTIVITY_PHASES.info;
+
+  // Full detail always reaches the debug log / persisted uiLog, regardless of
+  // how (or whether) it renders as a chat block — "Copy debug log" must never
+  // lose information because of how the chat happens to be displaying it.
   if (!restoringUi) {
     debugEntry('activity', {
       step,
@@ -2247,6 +2278,18 @@ function addActivity(step, phase, title, detail, tone = '') {
       title: title || meta.title,
       detail: detail ? String(detail).slice(0, 8000) : ''
     });
+  }
+
+  if (live) {
+    // Deliberately NOT added to uiLog: it's "what's happening right now", not
+    // a record worth replaying on the next panel open — restoring a stale
+    // "Clicking Search button" line after the run has long since finished
+    // would be actively misleading, not helpful. debugEntry above already
+    // has the full, permanent record for troubleshooting.
+    showLiveStatus((title || meta.title) + (detail ? ` — ${String(detail).slice(0, 100)}` : ''));
+    return null;
+  }
+  if (!restoringUi) {
     uiLog.push({ kind: 'activity', step, phase, title, detail: detail ? String(detail).slice(0, 2000) : '', tone });
     persistSession();
   }
@@ -3244,6 +3287,12 @@ async function handleSend() {
     debugEntry('user_message_queued', { text: promptText.slice(0, 500) });
     addActivity(null, 'info', 'Message queued', 'The agent will see it at its next step.');
     promptInput.value = '';
+  // Setting .value directly does NOT fire the 'input' listener that auto-
+  // grows the textarea, so the box stayed at whatever height a long message
+  // had grown to (visually "stuck half the panel tall") until the user
+  // happened to type something short enough to shrink it back down. Reset it
+  // explicitly here, the same way the 'input' listener would.
+  promptInput.style.height = 'auto';
     updateSendEnabled();
     return;
   }
@@ -3251,6 +3300,12 @@ async function handleSend() {
   addMessage('user', promptText);
   debugEntry('user_message', { text: promptText.slice(0, 500) });
   promptInput.value = '';
+  // Setting .value directly does NOT fire the 'input' listener that auto-
+  // grows the textarea, so the box stayed at whatever height a long message
+  // had grown to (visually "stuck half the panel tall") until the user
+  // happened to type something short enough to shrink it back down. Reset it
+  // explicitly here, the same way the 'input' listener would.
+  promptInput.style.height = 'auto';
 
   try {
     await runAgentLoop(promptText);
@@ -3259,6 +3314,7 @@ async function handleSend() {
     debugEntry('fatal_error', { error: err.message });
     addActivity(null, 'error', 'Unexpected error', err.message, 'error');
     isProcessing = false;
+    hideLiveStatus();
     updateSendEnabled();
   }
 }

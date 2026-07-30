@@ -172,7 +172,13 @@ CAPTCHAs and login walls are **detected, never solved** — the run parks in
 
 **Reading & acting**
 
-- **Side panel UI** — chat alongside any page, no separate window.
+- **Side panel UI** — chat alongside any page, no separate window. What the agent is doing
+  right now (which tool, which action) shows as one small, continuously-updated status
+  line rather than a permanent chat block per step — a long run stays readable instead of
+  filling the transcript with dozens of "Tool: X" / "Action succeeded" entries. Nothing is
+  lost: every step still reaches the full debug log ("Copy debug log"), and milestones that
+  actually matter (rows collected, an extractor's source before it runs, a run plan) stay
+  as permanent, visible entries.
 - **Accessibility-tree page reading** — compact, structured page state instead of raw
   HTML. Walks into *open* shadow roots too, so Web Components (common in modern design
   systems) aren't invisible — a *closed* shadow root has no JS-reachable API at all, by
