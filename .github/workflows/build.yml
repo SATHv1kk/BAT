@@ -1,13 +1,20 @@
-name: Build
+name: CI
 
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
+  # The live ATS checks hit four real job boards, so they run on a schedule
+  # instead of gating every push — endpoint drift is real, but it must not be
+  # able to turn an unrelated PR red.
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  check:
+    name: lint + test + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,4 +23,25 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      # Offline, deterministic. This gates the branch — CI previously ran only
+      # `npm run build`, so every logic regression in dedup, validation, or the
+      # runner state machine could merge green.
+      - run: npm test
       - run: npm run build
+
+  live:
+    name: live ATS adapters
+    # Only on a schedule or manual dispatch: a third-party endpoint change is
+    # information, not a reason to block a contributor's PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live
