@@ -24,3 +24,8 @@ Thumbs.db
 # A nested clone of this same repository was committed by mistake as a broken
 # submodule gitlink. Keep it untracked.
 GITHUB/
+
+# Suggested default BAT workspace folder (Settings -> Workspace folder). Collected
+# data belongs here, not in the repo — keep everything except the explainer out of git.
+workspace/*
+!workspace/README.md

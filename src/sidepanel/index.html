@@ -117,6 +117,12 @@
       font-size: 11px; color: var(--muted); line-height: 1.4;
     }
     .settings-checkbox input { flex: 0 0 auto; margin-top: 1px; }
+    .settings-hint {
+      font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: -2px;
+    }
+    .settings-hint code {
+      background: #f1f1f1; border-radius: 4px; padding: 1px 4px; font-size: 11px;
+    }
 
     /* Stored-data manager — the agent accumulates IndexedDB state (collections,
        cached extractors, runs) that used to be invisible and undeletable. */
@@ -390,11 +396,12 @@
       <button class="btn-ghost" id="saveKeyBtn">Save</button>
     </div>
     <div class="settings-status" id="keyStatus"></div>
-    <label class="settings-label" for="allowedSitesInput">Allowed sites for page actions</label>
-    <textarea id="allowedSitesInput" rows="3" placeholder="one domain per line, e.g. myLMS.com&#10;empty = no page actions anywhere"></textarea>
-    <div class="settings-row">
-      <button class="btn-ghost" id="saveSitesBtn">Save sites</button>
-      <span class="settings-status" id="sitesStatus"></span>
+    <label class="settings-label">Site access for page actions</label>
+    <div class="settings-status" id="sitesStatus"></div>
+    <div class="settings-hint">
+      Use the <strong>Allow &lt;site&gt;</strong> button above the composer to approve the
+      site you're on — that's the security boundary for clicking, typing, and running page
+      code, and it stays closed until you approve a site.
     </div>
     <label class="settings-checkbox">
       <input type="checkbox" id="allowAllToggle">
@@ -404,6 +411,11 @@
     <div class="settings-row">
       <button class="btn-ghost" id="workspaceBtn">Choose folder</button>
       <span class="settings-status" id="workspaceStatus"></span>
+    </div>
+    <div class="settings-hint">
+      One-time pick — Chrome requires this, it can't be set silently. The project's own
+      <code>workspace/</code> folder works well if you don't have a preferred location;
+      it's already excluded from git.
     </div>
     <label class="settings-label">Stored data</label>
     <div class="settings-row">

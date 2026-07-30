@@ -231,7 +231,12 @@ CAPTCHAs and login walls are **detected, never solved** — the run parks in
 - **Workspace folder** — grant BAT a folder on disk (Settings → Workspace folder) and the
   agent can save notes, collected data, and progress checkpoints as real files
   (`save_file` / `read_file` / `list_files`) that survive restarts. Access is limited to
-  the folder you pick, and every writer shares one per-file lock.
+  the folder you pick, and every writer shares one per-file lock. This is a genuine
+  one-time picker click — Chrome's File System Access API does not let any extension set
+  a folder silently or by path, by design — but it really is one-time: the handle is
+  stored and silently re-validated on every later launch. The repo's own
+  [`workspace/`](workspace/) folder is a ready-made, already-`.gitignore`d option if you
+  don't have a preferred location.
 - **Stored-data manager** — Settings → *Manage stored data* lists every collection, cached
   extractor (with its source), and run, and lets you inspect or delete any of them, plus
   pause/resume runs without going through the agent.
@@ -280,13 +285,12 @@ API.
 
 **4. Approve a site.** The allowlist is empty on a fresh install and **fails closed**: BAT
 can read any page, but it cannot click, type, or run page code anywhere until you say so.
-Open the site you want it to act on, then either:
+Open the site you want it to act on and click the **Allow \<site\>** button that appears
+above the composer — that's the one control for approving sites day-to-day; Settings only
+shows how many are currently allowed.
 
-- click the **Allow \<site\>** button that appears above the composer, or
-- add the domain under Settings (⚙) → *Allowed sites*.
-
-(There's an *Allow all sites* toggle for the unrestricted old behaviour — it's off by
-default on purpose; see [Security model](#security-model) for why.)
+(There's an *Allow all sites* toggle in Settings for the unrestricted old behaviour — it's
+off by default on purpose; see [Security model](#security-model) for why.)
 
 **5. Try it.** With a site approved, type a goal in plain language and press Enter, e.g.
 *"summarize this page"* (works with zero setup — reading never needed approval) or, on an

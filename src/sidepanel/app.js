@@ -176,8 +176,6 @@ const settingsPanel = document.getElementById('settingsPanel');
 const keyInput      = document.getElementById('keyInput');
 const saveKeyBtn    = document.getElementById('saveKeyBtn');
 const keyStatusEl   = document.getElementById('keyStatus');
-const allowedSitesInput = document.getElementById('allowedSitesInput');
-const saveSitesBtn  = document.getElementById('saveSitesBtn');
 const sitesStatusEl = document.getElementById('sitesStatus');
 const workspaceBtn  = document.getElementById('workspaceBtn');
 const workspaceStatusEl = document.getElementById('workspaceStatus');
@@ -2000,7 +1998,6 @@ async function loadAllowedSites() {
   const state = await Allowlist.loadAllowlist();
   allowedSites = state.sites;
   allowAllSites = state.allowAll;
-  if (allowedSitesInput) allowedSitesInput.value = allowedSites.join('\n');
   if (allowAllToggle) allowAllToggle.checked = allowAllSites;
   updateSitesStatus();
 }
@@ -2010,19 +2007,20 @@ function updateSitesStatus() {
   sitesStatusEl.textContent = allowAllSites
     ? 'All sites allowed (unrestricted)'
     : allowedSites.length
-      ? `${allowedSites.length} site(s) allowed`
+      ? `${allowedSites.length} site(s) allowed: ${allowedSites.join(', ')}`
       : 'No sites allowed — page actions are off';
   sitesStatusEl.classList.toggle('warn', allowAllSites || !allowedSites.length);
 }
 
-async function saveAllowedSites() {
-  const state = await Allowlist.saveAllowlist({
-    sites: Allowlist.parseAllowedSites(allowedSitesInput?.value),
-    allowAll: !!allowAllToggle?.checked
-  });
+// The bulk textarea editor is gone — day-to-day site approval is the one-click
+// "Allow <site>" button (renderAllowCurrentSite/Allowlist.grantHost). This is the
+// one remaining settings-driven write: the "Allow all sites" toggle, which never
+// touches the sites LIST itself (Allowlist.saveAllowlist skips SITES_KEY when
+// `sites` is omitted), only the separate unrestricted-mode flag.
+async function saveAllowAllToggle() {
+  const state = await Allowlist.saveAllowlist({ allowAll: !!allowAllToggle?.checked });
   allowedSites = state.sites;
   allowAllSites = state.allowAll;
-  if (allowedSitesInput) allowedSitesInput.value = allowedSites.join('\n');
   updateSitesStatus();
   renderAllowCurrentSite();
 }
@@ -3300,8 +3298,6 @@ if (keyInput) {
     if (e.key === 'Enter') { e.preventDefault(); saveKeyFromInput(); }
   });
 }
-if (saveSitesBtn) saveSitesBtn.addEventListener('click', saveAllowedSites);
-
 async function updateWorkspaceStatus() {
   if (!workspaceStatusEl) return;
   const s = await Workspace.getStatus();
@@ -3324,7 +3320,7 @@ if (workspaceBtn) {
   });
 }
 
-if (allowAllToggle) allowAllToggle.addEventListener('change', saveAllowedSites);
+if (allowAllToggle) allowAllToggle.addEventListener('change', saveAllowAllToggle);
 
 if (allowCurrentBtn) {
   allowCurrentBtn.addEventListener('click', async () => {
