@@ -14,6 +14,8 @@
 //
 // Both paths return the same shape: { ok, rows, pageTextLen, error?, via }.
 
+import { screenExtractorSource } from './extractor-screen.js';
+
 const MAX_ROWS = 2000;
 const EVAL_BLOCKED_RE = /content security policy|unsafe-eval|evalerror|blocked|refused to evaluate|csp/i;
 
@@ -22,12 +24,17 @@ const EVAL_BLOCKED_RE = /content security policy|unsafe-eval|evalerror|blocked|r
 function extractInPage(src, maxRows) {
   const pageTextLen = (document.body && document.body.innerText || '').length;
   try {
-    // eslint-disable-next-line no-new-func
+     
     const fn = new Function(src);
     const out = fn();
     if (!Array.isArray(out)) {
       return { ok: false, error: 'extractor must return an array of row objects', rows: [], pageTextLen };
     }
+    // Report the cap instead of silently swallowing it. A 3,000-row page quietly
+    // becoming 2,000 rows also taught validateReplay's collapse detector that
+    // 2,000 was normal, so the loss compounded invisibly.
+    const returned = out.length;
+    const truncated = returned > maxRows ? returned - maxRows : 0;
     const rows = [];
     for (const r of out.slice(0, maxRows)) {
       if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
@@ -40,7 +47,7 @@ function extractInPage(src, maxRows) {
       }
       rows.push(clean);
     }
-    return { ok: true, rows, pageTextLen };
+    return { ok: true, rows, pageTextLen, returned: returned, truncated: truncated };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e), rows: [], pageTextLen };
   }
@@ -110,14 +117,41 @@ async function viaCdp(tabId, source) {
   });
 }
 
+// The truncation note is built here so every caller reports it identically.
+function withTruncationNote(res, via, note) {
+  const out = { ...res, via };
+  if (note) out.note = note;
+  if (res.truncated > 0) {
+    const t = `extractor returned ${res.returned} rows — capped at ${MAX_ROWS}, ${res.truncated} DROPPED. `
+      + 'Narrow the extractor or paginate; this page\'s data is incomplete.';
+    out.note = out.note ? out.note + ' — ' + t : t;
+    out.truncationWarning = t;
+  }
+  return out;
+}
+
 export async function runExtractor(tabId, source) {
+  const screened = screenExtractorSource(source);
+  if (!screened.ok) {
+    // Belt and braces: the panel and the runner both screen before they get
+    // here, but this is the single choke point where model-authored code becomes
+    // running code, so it refuses on its own authority too.
+    return {
+      ok: false,
+      rows: [],
+      pageTextLen: 0,
+      via: 'screen',
+      error: `extractor rejected by safety screen: ${screened.reason}`,
+      rejectedByScreen: true
+    };
+  }
   let first;
   try {
     first = await viaScripting(tabId, source);
   } catch (e) {
     first = { ok: false, error: e?.message || 'injection failed', rows: [], pageTextLen: 0 };
   }
-  if (first.ok) return { ...first, via: 'scripting' };
+  if (first.ok) return withTruncationNote(first, 'scripting');
 
   // Only escalate for eval/CSP problems — a genuinely broken extractor must
   // report its own error, not be retried through a heavier path.
@@ -125,7 +159,7 @@ export async function runExtractor(tabId, source) {
 
   try {
     const second = await viaCdp(tabId, source);
-    return { ...second, via: 'cdp', note: 'page CSP blocked in-page compilation — ran via CDP' };
+    return withTruncationNote(second, 'cdp', 'page CSP blocked in-page compilation — ran via CDP');
   } catch (e) {
     return {
       ok: false,

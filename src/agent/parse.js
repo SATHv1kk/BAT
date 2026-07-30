@@ -17,6 +17,14 @@ export function parseAgentResponse(raw) {
   }
 }
 
+// Action names normalizeAction understands. An entry here that fails its own
+// argument check is a MALFORMED call, not an invitation to guess a click.
+const KNOWN_ACTIONS = new Set([
+  'left_click', 'form_input', 'type', 'key', 'find', 'javascript', 'navigate',
+  'scroll_down', 'scroll_up', 'scroll_to', 'go_back', 'go_forward', 'refresh',
+  'wait', 'done', 'batch'
+]);
+
 export function normalizeAction(parsed) {
   let action = (parsed.action || parsed.type || '').toLowerCase().replace(/-/g, '_');
   const ref = parsed.ref || parsed.targetRef || null;
@@ -55,6 +63,16 @@ export function normalizeAction(parsed) {
     if (val) return { action: 'type', ref, text, value: val, key, url };
   }
   if (action === 'left_click' && ref) return { action: 'left_click', ref, text, value, key, url };
+
+  // The generic "anything carrying a ref is a click" fallback is deliberately
+  // kept — sloppy models emit `{type:"action", ref:"ref_5"}` and clicking is the
+  // right guess there. But it must only apply to UNRECOGNIZED actions. It used to
+  // catch recognized-but-incomplete ones too, so `{"action":"type","ref":"ref_1"}`
+  // with no text silently CLICKED the field instead of reporting that the model
+  // forgot the text — a different action than the one that was asked for.
+  if (KNOWN_ACTIONS.has(action)) {
+    return { action: 'wait', ref, text, value, key, url, incomplete: action };
+  }
   if (parsed.type === 'action' && ref) return { action: 'left_click', ref, text, value, key, url };
   if (ref) return { action: 'left_click', ref, text, value, key, url };
   return { action: 'wait', ref: null, text, value, key, url };

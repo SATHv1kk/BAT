@@ -3,7 +3,7 @@
 
 (function () {
   const EXECUTE_TIMEOUT_MS = 10000;
-  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+  const delay = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
   const debuggerAttached = new Set();
 
@@ -72,7 +72,7 @@
 
   async function releaseDebugger(tabId) {
     if (!debuggerAttached.has(tabId)) return;
-    await new Promise((res) => chrome.debugger.detach({ tabId }, () => res()));
+    await new Promise((res) => { chrome.debugger.detach({ tabId }, () => res()); });
     debuggerAttached.delete(tabId);
     const m = tabMonitors.get(tabId);
     if (m) m.enabled = false; // CDP domains disable on detach
@@ -185,17 +185,20 @@
   async function withDebugger(tabId, fn) {
     const owned = await ensureDebugger(tabId);
     const cmd = (method, params) =>
-      new Promise((res, rej) =>
+      new Promise((res, rej) => {
         chrome.debugger.sendCommand({ tabId }, method, params, (result) => {
           const err = chrome.runtime.lastError;
-          if (!err) return res(result);
+          if (!err) {
+            res(result);
+            return;
+          }
           let msg = err.message || String(err);
           if (!owned && /not attached|detached/i.test(msg)) {
             msg += ' — another debugger (e.g. DevTools) is attached to this tab; close it and retry';
           }
           rej(new Error(msg));
-        })
-      );
+        });
+      });
     return fn(cmd, owned);
   }
 
@@ -528,7 +531,7 @@
     const target = frameId != null ? { tabId, frameIds: [frameId] } : { tabId };
     const evaluator = (src) => {
       try {
-        // eslint-disable-next-line no-eval
+         
         const v = eval(src); // handles statements and expressions alike
         return v === undefined ? null : v;
       } catch (e) {

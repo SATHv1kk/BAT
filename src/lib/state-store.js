@@ -57,17 +57,45 @@ const p = (req) => new Promise((resolve, reject) => {
   req.onerror = () => reject(req.error);
 });
 
+// Awaiting a transaction is not the same as awaiting its last request: only
+// oncomplete proves the data is durable. Anything that must survive a reload
+// waits on this.
+const txDone = (tx) => new Promise((resolve, reject) => {
+  tx.oncomplete = () => resolve();
+  tx.onerror = () => reject(tx.error);
+  tx.onabort = () => reject(tx.error || new Error('transaction aborted'));
+});
+
 // Normalized composite key: lowercase, trimmed, whitespace collapsed,
 // punctuation stripped — so "Sr. Engineer — Vision" and "sr engineer vision"
 // collide on purpose.
+//
+// Except: stripping ALL punctuation over-merged real, distinct rows. "C++
+// Developer" and "C Developer" became the same key, as did "C#"/"C", ".NET"/
+// "NET" and "Node.js"/"Nodejs" against their neighbours — and because the first
+// row wins, the loser was discarded silently. Tech names carry meaning in their
+// punctuation, so `+ # .` are transliterated to word-safe markers BEFORE the
+// strip rather than being erased by it.
+// A dot is only meaningful INSIDE a token ("Node.js", ".NET"). An abbreviating
+// dot ("Sr. Engineer") is punctuation and must still be erased, or every
+// abbreviation would grow a spurious "dot" segment.
+const TECH_TOKENS = [
+  [/\+\+/g, ' plusplus '],
+  [/\+/g, ' plus '],
+  [/#/g, ' sharp '],
+  [/(?<=[\p{L}\p{N}])\.(?=[\p{L}\p{N}])/gu, ' dot '],
+  [/(?<![\p{L}\p{N}])\.(?=[\p{L}\p{N}])/gu, ' dot ']
+];
+
 export function dedupKeyFor(row, fields) {
-  return fields.map(f => String(row?.[f] ?? '')
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  ).join('|');
+  return fields.map(f => {
+    let s = String(row?.[f] ?? '').toLowerCase().normalize('NFKD');
+    for (const [re, sub] of TECH_TOKENS) s = s.replace(re, sub);
+    return s
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }).join('|');
 }
 
 // Insert rows with dedup. On collision the FIRST record wins; the new row's
@@ -101,7 +129,7 @@ export async function addRows(collection, rows, { dedupFields, sourceField = 'so
   const prepared = [];
   const wantedKeys = new Set();
   for (const data of rows) {
-    let dedupKey = dedupKeyFor(data, dedupFields);
+    const dedupKey = dedupKeyFor(data, dedupFields);
     const blank = !dedupKey.replace(/\|/g, '').trim();
     prepared.push({ data, dedupKey, blank });
     if (!blank) wantedKeys.add(dedupKey);
@@ -174,11 +202,7 @@ export async function addRows(collection, rows, { dedupFields, sourceField = 'so
   metaStore.put(nextSeq, seqKey);
   metaStore.put(totalCount, countKey);
   metaStore.put(totalMerged, mergedKey);
-  await new Promise((resolve, reject) => {
-    t.oncomplete = resolve;
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('transaction aborted'));
-  });
+  await txDone(t);
   return { fresh, merged };
 }
 
@@ -204,7 +228,10 @@ export async function getCounts(collection) {
     p(store.get('merged:' + collection))
   ]);
   if (cnt == null) {
-    // Pre-counter data: scan once, then PERSIST so this never repeats.
+    // Pre-counter data: scan once, then PERSIST so this never repeats. The write
+    // must be AWAITED — returning before oncomplete meant the transaction could
+    // still abort, and then "this never repeats" quietly became "this repeats
+    // every single write", which is the O(n) scan this counter exists to avoid.
     const rows = await getRows(collection);
     const counts = {
       uniqueRows: rows.length,
@@ -213,6 +240,7 @@ export async function getCounts(collection) {
     const wt = db.transaction('meta', 'readwrite');
     wt.objectStore('meta').put(counts.uniqueRows, 'count:' + collection);
     wt.objectStore('meta').put(counts.duplicatesMerged, 'merged:' + collection);
+    await txDone(wt);
     return counts;
   }
   return { uniqueRows: cnt, duplicatesMerged: mrg || 0 };
@@ -251,6 +279,19 @@ export async function getExtractor(pattern) {
   return p(db.transaction('extractors', 'readonly').objectStore('extractors').get(pattern));
 }
 
+export async function listExtractors() {
+  const db = await openDb();
+  const all = await p(db.transaction('extractors', 'readonly').objectStore('extractors').getAll());
+  return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+export async function deleteExtractor(pattern) {
+  const db = await openDb();
+  const tx = db.transaction('extractors', 'readwrite');
+  tx.objectStore('extractors').delete(pattern);
+  await txDone(tx);
+}
+
 export async function putExtractor(record) {
   const db = await openDb();
   const t = db.transaction('extractors', 'readwrite');
@@ -282,6 +323,52 @@ export async function listRuns() {
   return p(db.transaction('runs', 'readonly').objectStore('runs').getAll());
 }
 
+// ── Inventory + deletion, for the stored-data manager ─────────────
+// Collected rows, cached extractors and run logs used to be invisible and
+// permanent: "Clear chat" only wiped chrome.storage.session, so a user had no way
+// to see what BAT had kept about them, let alone remove it.
+export async function listCollections() {
+  const db = await openDb();
+  const store = db.transaction('rows', 'readonly').objectStore('rows');
+  const keys = await p(store.index('byCollection').getAllKeys());
+  const tally = new Map();
+  for (const k of keys) {
+    const name = Array.isArray(k) ? k[0] : k;
+    tally.set(name, (tally.get(name) || 0) + 1);
+  }
+  const out = [];
+  for (const [name, rowCount] of tally) {
+    const counts = await getCounts(name).catch(() => ({ uniqueRows: rowCount, duplicatesMerged: 0 }));
+    out.push({ collection: name, ...counts });
+  }
+  return out.sort((a, b) => a.collection.localeCompare(b.collection));
+}
+
+export async function deleteCollection(collection) {
+  const db = await openDb();
+  const keys = await p(
+    db.transaction('rows', 'readonly').objectStore('rows').index('byCollection').getAllKeys(collection)
+  );
+  const tx = db.transaction(['rows', 'meta'], 'readwrite');
+  const rows = tx.objectStore('rows');
+  for (const k of keys) rows.delete(k);
+  const meta = tx.objectStore('meta');
+  for (const prefix of ['seq:', 'count:', 'merged:', 'notfound:']) meta.delete(prefix + collection);
+  await txDone(tx);
+  return keys.length;
+}
+
+export async function deleteRun(runId) {
+  const db = await openDb();
+  const logKeys = await p(db.transaction('log', 'readonly').objectStore('log').index('byRun').getAllKeys(runId));
+  const tx = db.transaction(['runs', 'log'], 'readwrite');
+  tx.objectStore('runs').delete(runId);
+  const log = tx.objectStore('log');
+  for (const k of logKeys) log.delete(k);
+  await txDone(tx);
+  return logKeys.length;
+}
+
 export async function logEvent(runId, entry) {
   const db = await openDb();
   try {
@@ -295,15 +382,21 @@ export async function logEvent(runId, entry) {
 // NOT-FOUND bookkeeping. Keyed by collection (the output filename) so it works
 // for interactive sweeps too, where there is no run id — otherwise the report's
 // NOT-FOUND section would read from a log nothing ever writes.
+// Read-modify-write inside ONE transaction. It previously opened a readwrite
+// transaction, awaited a get on it, then opened a SECOND transaction to do the
+// put — so two concurrent calls (easy: a sweep records several misses in
+// parallel) both read the same list and the second write erased the first.
+// IndexedDB serializes overlapping readwrite transactions on the same store, so
+// keeping it to one makes the update atomic.
 export async function recordNotFound(collection, label, detail = '') {
   const db = await openDb();
-  const t = db.transaction('meta', 'readwrite');
-  const store = t.objectStore('meta');
   const key = 'notfound:' + collection;
+  const tx = db.transaction('meta', 'readwrite');
+  const store = tx.objectStore('meta');
   const existing = (await p(store.get(key))) || [];
   if (!existing.some((e) => e.label === label)) existing.push({ label, detail, ts: Date.now() });
-  const wt = db.transaction('meta', 'readwrite');
-  wt.objectStore('meta').put(existing, key);
+  store.put(existing, key);
+  await txDone(tx);
   return existing.length;
 }
 

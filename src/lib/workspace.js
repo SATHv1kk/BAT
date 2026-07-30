@@ -104,6 +104,21 @@ export async function getStatus() {
   }
 }
 
+// ── Per-file write serialization ──────────────────────────────────
+// File System Access writables are swap-file based: two overlapping writers each
+// copy the file and the LAST close() silently discards the other's data. This
+// lock used to live only in output-writer.js, so `save_file mode:"append"`
+// racing `append_rows` on the same filename lost rows with no error anywhere.
+// The lock belongs at the file layer, where every writer passes through it.
+const fileLocks = new Map();
+
+export function withFileLock(name, fn) {
+  const prev = fileLocks.get(name) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  fileLocks.set(name, run.then(() => {}, () => {}));
+  return run;
+}
+
 export function safeName(name) {
   const clean = String(name || '').trim()
     .replace(/[\\/:*?"<>|]/g, '_')
@@ -113,16 +128,23 @@ export function safeName(name) {
   return clean;
 }
 
-export async function writeFile(filename, content, { append = false } = {}) {
-  const dir = await getGrantedHandle();
+export function writeFile(filename, content, opts = {}) {
   const name = safeName(filename);
+  return withFileLock(name, () => writeFileUnlocked(name, content, opts));
+}
+
+async function writeFileUnlocked(name, content, { append = false } = {}) {
+  const dir = await getGrantedHandle();
   const fh = await dir.getFileHandle(name, { create: true });
   const position = append ? (await fh.getFile()).size : 0;
   const writable = await fh.createWritable({ keepExistingData: append });
   if (append) await writable.write({ type: 'write', position, data: content });
   else await writable.write(content);
   await writable.close();
-  return { name, bytes: content.length, size: (await fh.getFile()).size };
+  const size = (await fh.getFile()).size;
+  // bytes was `content.length` — a character count reported as bytes, which is
+  // wrong for any non-ASCII content the agent saves.
+  return { name, bytes: new TextEncoder().encode(content).byteLength, size };
 }
 
 export async function readFile(filename) {
