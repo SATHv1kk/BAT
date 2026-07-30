@@ -158,7 +158,8 @@ if (!ONLY_LIVE) {
 
   // ── Modules that had no coverage at all until now ──
   for (const mod of ['redaction.test.mjs', 'allowlist.test.mjs', 'extractor-screen.test.mjs',
-    'extractor-ast-screen.test.mjs', 'output-writer.test.mjs', 'parse.test.mjs', 'site-verification.test.mjs']) {
+    'extractor-ast-screen.test.mjs', 'regex-guard.test.mjs', 'output-writer.test.mjs',
+    'parse.test.mjs', 'site-verification.test.mjs']) {
     const label = mod.replace('.test.mjs', '');
     console.log(`Module — ${label}`);
     const { default: run } = await import(new URL('./' + mod, import.meta.url).href);

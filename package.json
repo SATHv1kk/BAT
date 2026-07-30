@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "acorn": "^8.18.0",
-    "acorn-walk": "^8.3.5"
+    "acorn-walk": "^8.3.5",
+    "safe-regex": "^2.1.1"
   }
 }

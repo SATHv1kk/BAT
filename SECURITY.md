@@ -112,7 +112,34 @@ This is a denylist, and a denylist over source text is not a sandbox. It raises 
 an injected extractor substantially and makes the attempt visible; it is not a proof of
 containment. The real containment is the allowlist above it.
 
-### 3. Redaction (data egress)
+### 3. Regex denial-of-service (self-inflicted hang)
+
+A different kind of model-supplied input compiles into a `RegExp`: `run_control` plan
+rules (`rule.matches`, `stop_when.matches`), `ats_fetch`'s `location_filter`, and
+`read_console`/`read_network`'s `pattern`/`filter`. All four are tested against
+page-or-API-derived strings. V8 has no built-in protection against catastrophic
+backtracking, and JavaScript cannot interrupt a synchronous `RegExp.test()` call once it
+starts — a single pattern shaped like `(a+)+` hung for more than 5 seconds against a
+35-character input in testing. Run from `plan.js` (shared with the background runner),
+that is a hang of the whole extension, not one tool call, and per the threat model above
+("a model that goes wrong") an arbitrary model-authored pattern is not automatically
+trustworthy input.
+
+`src/lib/regex-guard.js` gates every one of those five call sites through a real AST-based
+safety check (`safe-regex`, backed by `regexp-tree`) before compiling. It is tuned against
+this project's own built-in date-filtering patterns (`STOP_PATTERNS` in `plan.js`) so a
+legitimate, already-shipped feature doesn't get rejected as collateral damage.
+
+**Known gap:** the check catches the classic nested-quantifier shape, which is the large
+majority of real-world ReDoS reports, but not every catastrophic shape — alternation-based
+blowup (`(a|a)*`) is not caught, and an input-length cap doesn't meaningfully help either
+(the blowup is steep enough at well under 30 characters that a cap tight enough to matter
+would reject ordinary inputs). Fully closing this needs a hard execution timeout — running
+the match in a Worker and terminating it on overrun — which turns every call site async;
+not done here. Tested and documented as a known gap in `test/regex-guard.test.mjs` rather
+than silently relied upon.
+
+### 4. Redaction (data egress)
 
 The accessibility tree never reports the value of a password, hidden, one-time-code, or
 payment-autocomplete field — it emits `[value redacted]`.

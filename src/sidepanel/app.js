@@ -29,6 +29,7 @@ import { validatePlan, STOP_PATTERNS, fillTemplate } from '../lib/plan.js';
 import { SITE_CONFIGS } from '../shared/site-configs.js';
 import * as Allowlist from '../lib/allowlist.js';
 import { screenExtractorSource } from '../lib/extractor-screen.js';
+import { compileGuardedRegex } from '../lib/regex-guard.js';
 import * as SiteVerify from '../lib/site-verification.js';
 import { buildSystemPrompt } from './prompt.js';
 import { activeToolDefs } from './tool-defs.js';
@@ -1227,8 +1228,8 @@ async function atsFetchTool(args, step) {
   let rows = res.rows;
   const total = rows.length;
   if (args.location_filter) {
-    let re;
-    try { re = new RegExp(args.location_filter, 'i'); } catch { return 'Invalid location_filter regex.'; }
+    const { ok, re, reason } = compileGuardedRegex(args.location_filter);
+    if (!ok) return `Invalid location_filter: ${reason}`;
     rows = rows.filter(r => re.test(r.Location || ''));
   }
   if (args.set_fields && typeof args.set_fields === 'object' && !Array.isArray(args.set_fields)) {
@@ -1461,9 +1462,9 @@ async function runTool(state, name, args, step, opts = {}) {
     if (!fn) return 'Monitoring unavailable — BrowserTools not loaded.';
     try {
       const r = await fn(state.tabId, args.pattern || args.filter, Math.min(args.limit || 40, 100));
-      const head = r.first
+      const head = (r.first
         ? 'Capture just started — entries accumulate from now on; interact with the page and call again to see more.\n'
-        : '';
+        : '') + (r.filterError ? r.filterError + ' — showing unfiltered entries instead.\n' : '');
       if (!r.entries.length) {
         return head + 'No entries captured' + ((args.pattern || args.filter) ? ' matching the filter.' : ' yet.');
       }

@@ -1,6 +1,8 @@
 // Pure plan/runner helpers — shared by the service-worker runner and the
 // panel's run_control tool, and testable in plain Node.
 
+import { compileGuardedRegex } from './regex-guard.js';
+
 export function fillTemplate(template, vars = {}, page = null) {
   let url = String(template || '');
   for (const [k, v] of Object.entries(vars || {})) {
@@ -13,13 +15,16 @@ export function fillTemplate(template, vars = {}, page = null) {
 // Filtering/flagging is plan configuration, not extractor logic.
 export function applyRules(rows, rules = []) {
   if (!rules?.length) return rows;
+  // Compile (and safety-check, see regex-guard.js) once per rule, not once
+  // per row × rule — rules.matches is model-authored, so every compile now
+  // also runs a real safety analysis, and rows can number in the thousands.
+  const compiled = rules.map((rule) => ({ rule, ...compileGuardedRegex(rule.matches) }));
   const kept = [];
   for (const row of rows) {
     let excluded = false;
     let out = row;
-    for (const rule of rules) {
-      let re;
-      try { re = new RegExp(rule.matches, 'i'); } catch { continue; }
+    for (const { rule, ok, re } of compiled) {
+      if (!ok) continue; // invalid or unsafe pattern — same soft-skip as before
       if (!re.test(String(out[rule.field] ?? ''))) continue;
       if (rule.action === 'exclude') { excluded = true; break; }
       if (rule.action === 'flag') out = { ...out, ...(rule.set || { Flag: '*' }) };
@@ -33,8 +38,8 @@ export function applyRules(rows, rules = []) {
 // the RAW rows so an excluded row still terminates the unit.
 export function rowsMatchStop(rows, stopWhen) {
   if (!stopWhen?.field || !stopWhen?.matches) return false;
-  let re;
-  try { re = new RegExp(stopWhen.matches, 'i'); } catch { return false; }
+  const { ok, re } = compileGuardedRegex(stopWhen.matches);
+  if (!ok) return false;
   return rows.some((r) => re.test(String(r[stopWhen.field] ?? '')));
 }
 

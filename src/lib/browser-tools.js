@@ -1,6 +1,8 @@
 // Browser action execution — tool handlers backed by CDP + the scripting API.
 // Loaded before sidebar.js; exposes window.BrowserTools.
 
+import { compileGuardedRegex } from './regex-guard.js';
+
 (function () {
   const EXECUTE_TIMEOUT_MS = 10000;
   const delay = (ms) => new Promise((r) => { setTimeout(r, ms); });
@@ -161,25 +163,25 @@
   async function readConsole(tabId, pattern, limit = 40) {
     const first = await enableMonitoring(tabId);
     let entries = getMonitor(tabId).console;
+    let filterError;
     if (pattern) {
-      try {
-        const re = new RegExp(pattern, 'i');
-        entries = entries.filter(e => re.test(e.text));
-      } catch (_) {}
+      const { ok, re, reason } = compileGuardedRegex(pattern);
+      if (ok) entries = entries.filter(e => re.test(e.text));
+      else filterError = 'pattern ignored: ' + reason;
     }
-    return { first, entries: entries.slice(-limit) };
+    return { first, entries: entries.slice(-limit), filterError };
   }
 
   async function readNetwork(tabId, filter, limit = 40) {
     const first = await enableMonitoring(tabId);
     let entries = getMonitor(tabId).network;
+    let filterError;
     if (filter) {
-      try {
-        const re = new RegExp(filter, 'i');
-        entries = entries.filter(e => re.test(e.url));
-      } catch (_) {}
+      const { ok, re, reason } = compileGuardedRegex(filter);
+      if (ok) entries = entries.filter(e => re.test(e.url));
+      else filterError = 'pattern ignored: ' + reason;
     }
-    return { first, entries: entries.slice(-limit) };
+    return { first, entries: entries.slice(-limit), filterError };
   }
 
   async function withDebugger(tabId, fn) {

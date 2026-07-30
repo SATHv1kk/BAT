@@ -166,7 +166,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 439 offline assertions — deterministic, no network. Gates CI.
+npm test           # 459 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs
@@ -210,6 +210,7 @@ src/
 │   ├── extractor-ast-screen.js  AST alias tracking: closes what the text screen can't see
 │   ├── extractor-exec.js  Runs extractors: scripting → CDP on CSP block
 │   ├── extractors.js      URL patterns, schema fingerprints, replay validation
+│   ├── regex-guard.js     Rejects catastrophic-backtracking regex before compiling it
 │   ├── state-store.js     IndexedDB: rows/dedup, runs, log, extractor cache
 │   ├── output-writer.js   TSV/CSV append-only writer (pure core is unit-tested)
 │   ├── workspace.js       File System Access folder + the shared per-file write lock
@@ -310,7 +311,17 @@ somewhere it doesn't model (an arbitrary object field, a `Map`, a `Promise`, a `
 still escapes both layers. See SECURITY.md for the precise scope. The allowlist above all
 of this is the real boundary.
 
-### 3. Redaction — before anything leaves the browser
+### 3. Regex denial-of-service guard
+
+Model-authored regex patterns (`run_control` plan rules, `ats_fetch`'s `location_filter`,
+`read_console`/`read_network` filters) are compiled through `src/lib/regex-guard.js` before
+`new RegExp(...)` ever sees them — a real AST-based safety check, not another regex,
+because a pattern shaped like `(a+)+` hangs V8's engine on nothing (mid-thirties characters)
+with no way for JavaScript to interrupt it once started. Tuned so it doesn't reject this
+project's own built-in date-filtering patterns. See SECURITY.md for what it does and does
+not catch.
+
+### 4. Redaction — before anything leaves the browser
 
 The accessibility tree reports `[value redacted]` for password, hidden, one-time-code
 and payment-autocomplete fields. Extractor synthesis uploads page markup to the model, so
