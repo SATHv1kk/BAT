@@ -193,7 +193,7 @@ async function addRowsUnlocked(collection, rows, { dedupFields, sourceField = 's
     // the O(n) scan exactly once and persist the result below.
     const all = await getRows(collection);
     totalCount = all.length;
-    totalMerged = all.reduce((n, r) => n + (r.mergedCount || 0), 0);
+    totalMerged = all.reduce((n, r) => n + (Number(r.mergedCount) || 0), 0);
   }
 
   // Phase 2 — decide everything in memory (no IDB, no awaits).
@@ -246,7 +246,7 @@ export async function getRows(collection) {
   try {
     const store = db.transaction('rows', 'readonly').objectStore('rows');
     const all = await p(store.index('byCollection').getAll(collection));
-    return all.sort((a, b) => a.seq - b.seq);
+    return all.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
   } finally {
     /* connection cached — kept open */
   }
@@ -327,21 +327,27 @@ export async function deleteExtractor(pattern) {
   await txDone(tx);
 }
 
+// txDone, not p(): these three writes are the ones that MUST survive a reload,
+// and awaiting the request only proves it was accepted, not that the
+// transaction committed (see the comment on txDone above — the rule was stated
+// here and then not followed by exactly the calls that depend on it). The
+// window is small but real: the runner is a service worker that Chrome evicts
+// at will, and this is precisely the "checkpoint after EVERY page" write whose
+// whole job is to make that eviction a non-event. Losing it silently replays a
+// page, or resurrects an extractor that was just halted.
 export async function putExtractor(record) {
   const db = await openDb();
   const t = db.transaction('extractors', 'readwrite');
-  await p(t.objectStore('extractors').put({ ...record, updatedAt: Date.now() }));
+  t.objectStore('extractors').put({ ...record, updatedAt: Date.now() });
+  await txDone(t);
 }
 
 // ── Run + log tables (consumed by the plan runner; minimal API for now) ──
 export async function saveRun(run) {
   const db = await openDb();
-  try {
-    const t = db.transaction('runs', 'readwrite');
-    await p(t.objectStore('runs').put({ ...run, updatedAt: Date.now() }));
-  } finally {
-    /* connection cached — kept open */
-  }
+  const t = db.transaction('runs', 'readwrite');
+  t.objectStore('runs').put({ ...run, updatedAt: Date.now() });
+  await txDone(t);
 }
 
 export async function getRun(id) {
@@ -404,14 +410,24 @@ export async function deleteRun(runId) {
   return logKeys.length;
 }
 
+// Nuclear reset — clear all stored data. Called by "Clear chat" so the user
+// gets a completely clean slate.
+export async function clearAll() {
+  const db = await openDb();
+  const t = db.transaction(['rows', 'meta', 'runs', 'log', 'extractors'], 'readwrite');
+  t.objectStore('rows').clear();
+  t.objectStore('meta').clear();
+  t.objectStore('runs').clear();
+  t.objectStore('log').clear();
+  t.objectStore('extractors').clear();
+  await txDone(t);
+}
+
 export async function logEvent(runId, entry) {
   const db = await openDb();
-  try {
-    const t = db.transaction('log', 'readwrite');
-    await p(t.objectStore('log').add({ runId, ts: Date.now(), ...entry }));
-  } finally {
-    /* connection cached — kept open */
-  }
+  const t = db.transaction('log', 'readwrite');
+  t.objectStore('log').add({ runId, ts: Date.now(), ...entry });
+  await txDone(t);
 }
 
 // NOT-FOUND bookkeeping. Keyed by collection (the output filename) so it works

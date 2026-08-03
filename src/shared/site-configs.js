@@ -38,11 +38,20 @@ export const SITE_CONFIGS = [
   {
     site: 'irishjobs.ie',
     name: 'IrishJobs',
-    url_template: 'https://www.irishjobs.ie/jobs?q={keyword}&sort=recent&page={page}',
-    pages: { start: 1, step: 1, max: 5 },
+    url_template: 'https://www.irishjobs.ie/jobs/{keyword}?sort=2&action=sort_publish&searchOrigin=membersarea&page={page}',
+    pages: { start: 1, step: 1, max: 3 },
     verified: false,
-    probe: 'HTTP 200 but empty shell (JS-rendered); repeat requests timed out (rate limiting)',
-    note: 'confirm the query/sort/page params in Chrome before a multi-page run'
+    probe: 'HTTP 200 but empty shell (JS-rendered); aggressive anti-bot on direct URL nav — requires searchOrigin=membersarea and an existing session cookie',
+    selectors: {
+      card: '[data-at="job-item"]',
+      title: '[data-at="job-item-title"]',
+      company: '[data-at="job-item-company-name"]',
+      location: '[data-at="job-item-location"]',
+      date: '[data-at="job-item-timeago"]',
+      salary: '[data-at="job-item-salary-info"]',
+      url: 'a[href*="/job/"]'
+    },
+    note: 'ANTI-BOT: direct ?q= URLs are blocked. Only path /jobs/{keyword} works, and only with searchOrigin=membersarea. sort=2 means date. The site may still rate-limit; max 3 pages recommended. Tab must have a session cookie from search form interaction first.'
   },
   {
     site: 'jobs.workable.com',

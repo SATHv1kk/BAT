@@ -187,7 +187,7 @@ const clearChatBtn  = document.getElementById('clearChatBtn');
 const copyDebugBtn  = document.getElementById('copyDebugBtn');
 const debugStatusEl = document.getElementById('debugStatus');
 const modelSelect   = document.getElementById('modelSelect');
-const modelHintEl   = document.getElementById('modelHint');
+const modelStatusEl = document.getElementById('modelStatus');
 const settingsBtn   = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
 const keyInput      = document.getElementById('keyInput');
@@ -195,6 +195,8 @@ const saveKeyBtn    = document.getElementById('saveKeyBtn');
 const keyStatusEl   = document.getElementById('keyStatus');
 const sitesStatusEl = document.getElementById('sitesStatus');
 const workspaceBtn  = document.getElementById('workspaceBtn');
+const workspaceReconnectBtn = document.getElementById('workspaceReconnectBtn');
+const workspaceEmbeddedBtn  = document.getElementById('workspaceEmbeddedBtn');
 const workspaceStatusEl = document.getElementById('workspaceStatus');
 const allowAllToggle = document.getElementById('allowAllToggle');
 const allowCurrentBtn = document.getElementById('allowCurrentBtn');
@@ -203,6 +205,7 @@ const dataPanel     = document.getElementById('dataPanel');
 const dataBody      = document.getElementById('dataBody');
 const dataCloseBtn  = document.getElementById('dataCloseBtn');
 const dataStatusEl  = document.getElementById('dataStatus');
+const rowCounterEl  = document.getElementById('rowCounter');
 
 // ── Helpers ───────────────────────────────────────────────────────
 const delay = (ms) => new Promise((r) => { setTimeout(r, ms); });
@@ -217,7 +220,6 @@ function updateSendEnabled() {
   // Typing stays enabled during a run — messages sent mid-run are queued and
   // delivered to the agent at its next step.
   if (sendBtn) sendBtn.disabled = !hasKey || !hasText;
-  if (promptInput) promptInput.disabled = !hasKey;
   if (stopBtn) stopBtn.classList.toggle('visible', isProcessing);
   if (modelSelect) modelSelect.disabled = isProcessing;
 }
@@ -232,10 +234,10 @@ function modelSupportsThinking(modelId) {
   return modelId === 'deepseek-v4-pro' || modelId === 'deepseek-v4-flash';
 }
 
+// The model label lives in Settings next to the picker now, not on a permanent
+// hint line under the composer.
 function updateModelHint() {
-  if (modelHintEl) {
-    modelHintEl.textContent = `${getModelLabel()} · Ask anything · Command to control page`;
-  }
+  if (modelStatusEl) modelStatusEl.textContent = getModelLabel();
 }
 
 async function loadModel() {
@@ -848,7 +850,7 @@ function tryParseLegacyAction(content) {
     return (parsed.actions || []).map((a, i) => legacyActionToToolCall(a, i)).filter(Boolean);
   }
   // parseAgentResponse falls back to {action:'wait'} on failure — only accept an explicit wait
-  if (parsed.action === 'wait' && !/"action"\s*:\s*"wait"/.test(content)) return [];
+  if (parsed.action === 'wait' && !/"action"\s*:\s*"wait"\s*[,}\]]/.test(content)) return [];
   const tc = legacyActionToToolCall(parsed, 0);
   return tc ? [tc] : [];
 }
@@ -890,8 +892,15 @@ async function buildSnapshot(state, { force = false, skipAutoScroll = false } = 
     state.unreadableStreak = (state.unreadableStreak || 0) + 1;
     const reason = lastObserveError.get(state.tabId);
     let msg = reason
-      ? `Could not read the page — ${reason}.\n`
-      : 'Could not read the page (tab may be loading or protected).\n';
+      ? `Could not read the page — ${reason}.`
+      : 'Could not read the page (tab may be loading or protected).';
+    // Chrome's own error interstitial (not the site's) — the site returned
+    // a 403/429 or blocked the request because tabs.update / location.href
+    // looks like automation. The fix is to use the page's own UI links instead.
+    if (/error page/i.test(reason || '')) {
+      msg += ' This usually means the site blocked the request — try reaching the same page by clicking a link on the current page instead of navigating by URL.';
+    }
+    msg += '\n';
     // The reason this counter exists at all: a page that fails to read is NOT
     // the same as an unchanged tree, and unchangedStreak never sees this case
     // (it's only ever touched below, on a SUCCESSFUL read) — so without this,
@@ -1002,16 +1011,38 @@ async function pipeRowsToCollection(args, rows, step, label) {
   });
   let fileNote = 'nothing new to append';
   if (fresh.length) {
-    const r = await writerAppendRows(args.filename, fresh.map(f => Store.projectRow(f, sourceField)), {
-      columns: args.columns,
-      format: args.format
-    });
-    fileNote = `file now holds ${r.rowCount} data rows`;
+    try {
+      const r = await writerAppendRows(args.filename, fresh.map(f => Store.projectRow(f, sourceField)), {
+        columns: args.columns,
+        format: args.format
+      });
+      fileNote = `file now holds ${r.rowCount} data rows`;
+    } catch (e) {
+      // The store is the authority and it already has these rows; the file is
+      // only a projection of it. A disconnected workspace folder must therefore
+      // not read as "collection failed" — that would push the model into
+      // re-collecting data it already holds. Say plainly what did and did not
+      // happen, and name the one action that fixes it.
+      fileNote = `FILE NOT WRITTEN — ${e.message} Rows are safe in the store; run export_rows once that is fixed`;
+      addActivity(step, 'warn', 'Rows stored but not written to the file', e.message, 'warn');
+      debugEntry('file_write_failed', { collection, fresh: fresh.length, error: e.message });
+    }
   }
   const counts = await Store.getCounts(collection); // O(1) — not a full re-read
+  refreshRowCounter();
   addActivity(step, 'result', label,
     `${collection}: +${fresh.length} new, ${merged} duplicate(s) merged → ${counts.uniqueRows} unique`, 'success');
   return { fresh: fresh.length, merged, uniqueRows: counts.uniqueRows, fileNote };
+}
+
+async function refreshRowCounter() {
+  if (!rowCounterEl) return;
+  try {
+    const cols = await Store.listCollections();
+    const total = cols.reduce((n, c) => n + c.uniqueRows, 0);
+    rowCounterEl.textContent = `${total} row${total !== 1 ? 's' : ''}`;
+    rowCounterEl.hidden = total === 0;
+  } catch { rowCounterEl.hidden = true; }
 }
 
 // ── run_control: plan compiler front-end + runner remote control ──
@@ -1158,6 +1189,7 @@ async function runControlTool(state, args, step) {
           : ' · UNVERIFIED')
         + (c.note ? ` · ${c.note}` : '')
         + (c.verificationNote ? ` · ${c.verificationNote}` : '')
+        + (c.selectors ? ` · selectors: ${Object.entries(c.selectors).map(([k,v]) => k + '=' + JSON.stringify(v)).join(', ')}` : '')
       ).join('\n')
       + (unverified.length
         ? `\n\nBefore building a large run on any UNVERIFIED template, verify it: run_control {action:"verify", site:"${unverified[0]}", vars:{...}}. `
@@ -1806,9 +1838,7 @@ async function runAgentLoop(userText) {
       pruneSessionForBudget();
       const messages = [{
         role: 'system',
-        content: buildSystemPrompt({
-          modelLabel: getModelLabel(), modelId: currentModel, visionEnabled, nativeToolsEnabled
-        })
+        content: buildSystemPrompt({ visionEnabled, nativeToolsEnabled })
       }, ...session];
 
       // Route reasoning effort by difficulty: full effort for the opening plan
@@ -2167,13 +2197,21 @@ async function restoreSession() {
 }
 
 // ── Chat UI ───────────────────────────────────────────────────────
-function addMessage(role, text) {
+// `persist: false` renders the line without recording it in the transcript.
+// It exists for the notices init writes on every panel open ("Restored previous
+// conversation", "No sites are approved yet", "Set your API key"). Those used
+// to be persisted like any other message, so each open replayed the previous
+// open's copy and appended a fresh one — after a handful of opens the top of
+// the chat was nothing but repeated boilerplate, and since bat_ui is capped at
+// 300 entries, the repeats eventually evicted real conversation. They describe
+// the state at open time, so they are recomputed each open, never replayed.
+function addMessage(role, text, { persist = true } = {}) {
   const div = document.createElement('div');
   div.className = `message ${role}`;
   div.textContent = text;
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
-  if (!restoringUi) {
+  if (persist && !restoringUi) {
     uiLog.push({ kind: 'message', role, text: String(text).slice(0, 4000) });
     persistSession();
   }
@@ -2265,7 +2303,10 @@ function hideLiveStatus() {
 // as permanent, visible entries exactly as before. Only the two GENERIC
 // per-tool-call lines ("Tool: X" before dispatch, "Action succeeded/failed"
 // after) pass live:true — everything else is unaffected.
-function addActivity(step, phase, title, detail, tone = '', live = false) {
+// `persist: false` (last arg) renders the block for this panel session only —
+// same reasoning as addMessage's: a notice recomputed on every open must not
+// also be replayed from the previous one.
+function addActivity(step, phase, title, detail, tone = '', live = false, persist = true) {
   const meta = ACTIVITY_PHASES[phase] || ACTIVITY_PHASES.info;
 
   // Full detail always reaches the debug log / persisted uiLog, regardless of
@@ -2289,7 +2330,7 @@ function addActivity(step, phase, title, detail, tone = '', live = false) {
     showLiveStatus((title || meta.title) + (detail ? ` — ${String(detail).slice(0, 100)}` : ''));
     return null;
   }
-  if (!restoringUi) {
+  if (persist && !restoringUi) {
     uiLog.push({ kind: 'activity', step, phase, title, detail: detail ? String(detail).slice(0, 2000) : '', tone });
     persistSession();
   }
@@ -2389,7 +2430,7 @@ async function copyDebugLog() {
 
 function clearChat() {
   if (isProcessing) {
-    addMessage('system', 'Stop the agent before clearing the chat.');
+    addMessage('system', 'Stop the agent before clearing.');
     return;
   }
   session = [];
@@ -2402,7 +2443,10 @@ function clearChat() {
     .catch((e) => debugEntry('clear_session_failed', { error: e?.message }));
   chatEl.innerHTML = '';
   updateDebugStatus();
-  addMessage('system', 'Chat cleared.');
+  // Clear all collected data and workspace files.
+  Store.clearAll().catch(() => {});
+  Workspace.clearFiles().catch(() => {});
+  addMessage('system', 'Cleared — chat, collected data, and files.');
 }
 
 // ── Tab helper ────────────────────────────────────────────────────
@@ -2427,12 +2471,12 @@ function renumberTreeRefs(tree, frameId, registry, numbering) {
       globalRef = 'ref_' + (++numbering.counter);
       numbering.byKey.set(key, globalRef);
     }
-    const labelMatch = line.match(/"([^"]+)"/);
+    const labelMatch = line.match(/"((?:[^"\\]|\\.)*)"/);
     registry[globalRef] = {
       frameId,
       localRef,
-      label: labelMatch?.[1] || '',
-      role: (line.match(/^\s*(\w+)/) || [])[1] || ''
+      label: labelMatch?.[1]?.replace(/\\"/g, '"') || '',
+      tag: (line.match(/^\s*(\w+)/) || [])[1] || ''
     };
     out.push(line.replace(/\[ref_\d+\]/, '[' + globalRef + ']'));
   }
@@ -3032,7 +3076,7 @@ async function findCoordsByRegistryLabel(tabId, needle) {
   for (const [globalRef, entry] of Object.entries(registry)) {
     const lab = (entry.label || '').replace(/\s+/g, ' ').trim().toLowerCase();
     if (!lab || /^question\s*[(:]/i.test(lab) || /single choice question/i.test(lab)) continue;
-    if (lab.length > 140 && entry.role !== 'radio' && entry.role !== 'checkbox') continue;
+    if (lab.length > 140 && entry.role !== 'radio' && entry.role !== 'checkbox' && entry.tag !== 'input') continue;
     if ((lower === 'resume' || lower === 'restart') && lab !== lower) continue;
     const score = lab === lower ? 1000
       : lab.includes(lower) ? lower.length + 100
@@ -3440,7 +3484,18 @@ if (modelSelect) {
 clearChatBtn.addEventListener('click', clearChat);
 if (copyDebugBtn) copyDebugBtn.addEventListener('click', copyDebugLog);
 if (settingsBtn && settingsPanel) {
-  settingsBtn.addEventListener('click', () => { settingsPanel.hidden = !settingsPanel.hidden; });
+  settingsBtn.addEventListener('click', () => {
+    const open = settingsPanel.hidden;
+    settingsPanel.hidden = !open;
+    settingsBtn.setAttribute('aria-expanded', String(open));
+    // The panel is now the only place these are visible, so they have to be
+    // current the moment it opens rather than only at startup.
+    if (open) {
+      updateWorkspaceStatus();
+      updateDataStatus();
+      updateDebugStatus();
+    }
+  });
 }
 if (saveKeyBtn) saveKeyBtn.addEventListener('click', saveKeyFromInput);
 if (keyInput) {
@@ -3448,22 +3503,30 @@ if (keyInput) {
     if (e.key === 'Enter') { e.preventDefault(); saveKeyFromInput(); }
   });
 }
+// One fixed location, reported plainly. A pinned-but-disconnected folder is an
+// ERROR state, not a shrug: nothing is being written while it lasts, because
+// the alternative — quietly writing to embedded storage instead — is exactly
+// the drift the pinning exists to stop.
 async function updateWorkspaceStatus() {
   if (!workspaceStatusEl) return;
   const s = await Workspace.getStatus();
   workspaceStatusEl.textContent = s.text;
-  // A real granted folder is "ok" (green). Embedded storage is fully
-  // functional either way — degraded (a folder WAS chosen but needs
-  // reconnecting) gets a nudge to fix it; chosen-nothing-yet gets neither
-  // color, since that's just the ordinary default, not a problem.
-  workspaceStatusEl.classList.toggle('ok', s.ok && !s.embedded);
-  workspaceStatusEl.classList.toggle('warn', !!s.degraded);
+  workspaceStatusEl.classList.toggle('ok', s.ok && s.pinned);
+  workspaceStatusEl.classList.toggle('err', !!s.needsReconnect);
+  if (workspaceBtn) workspaceBtn.textContent = s.pinned ? 'Change folder' : 'Choose folder';
+  if (workspaceReconnectBtn) workspaceReconnectBtn.hidden = !s.needsReconnect;
+  // Offered only once a folder is pinned — it is the way back out when the
+  // pinned folder is gone for good (unplugged drive, deleted directory) and
+  // every write would otherwise be an inescapable error.
+  if (workspaceEmbeddedBtn) workspaceEmbeddedBtn.hidden = !s.pinned;
 }
 
 if (workspaceBtn) {
   workspaceBtn.addEventListener('click', async () => {
     try {
-      await Workspace.pickWorkspace();
+      const handle = await Workspace.pickWorkspace();
+      addActivity(null, 'info', 'Workspace folder pinned',
+        `Files now go to "${handle?.name || 'the chosen folder'}" and nowhere else.`, 'success');
     } catch (e) {
       // AbortError is the user closing the picker — anything else is a real fault.
       if (e?.name !== 'AbortError') {
@@ -3471,6 +3534,32 @@ if (workspaceBtn) {
         addActivity(null, 'error', 'Could not set the workspace folder', e?.message || String(e), 'error');
       }
     }
+    updateWorkspaceStatus();
+  });
+}
+
+if (workspaceReconnectBtn) {
+  workspaceReconnectBtn.addEventListener('click', async () => {
+    const res = await Workspace.reconnectWorkspace();
+    if (res.ok) {
+      addActivity(null, 'info', `Reconnected "${res.name}"`, 'File writes resume at the pinned folder.', 'success');
+    } else {
+      debugEntry('workspace_reconnect_failed', { reason: res.reason });
+      addActivity(null, 'warn', 'Could not reconnect the folder',
+        `${res.reason}. Use "Change folder" to re-pick it, or "Use embedded storage" to stop using a folder.`, 'warn');
+    }
+    updateWorkspaceStatus();
+  });
+}
+
+if (workspaceEmbeddedBtn) {
+  workspaceEmbeddedBtn.addEventListener('click', async () => {
+    const s = await Workspace.getStatus();
+    if (!window.confirm(
+      `Stop using the folder "${s.location}" and keep files in embedded storage instead?\n\n`
+      + 'Files already written to that folder are left alone; new ones go inside the extension.')) return;
+    await Workspace.useEmbeddedStorage();
+    addActivity(null, 'info', 'Workspace set to embedded storage', 'Files now live inside the extension.', 'success');
     updateWorkspaceStatus();
   });
 }
@@ -3647,6 +3736,10 @@ async function updateDataStatus() {
     ]);
     const rows = collections.reduce((n, c) => n + c.uniqueRows, 0);
     dataStatusEl.textContent = `${rows} row(s), ${extractors.length} extractor(s), ${runs.length} run(s)`;
+    if (rowCounterEl) {
+      rowCounterEl.textContent = `${rows} row${rows !== 1 ? 's' : ''}`;
+      rowCounterEl.hidden = rows === 0;
+    }
   } catch (e) {
     dataStatusEl.textContent = 'unavailable';
     debugEntry('data_status_failed', { error: e.message });
@@ -3676,31 +3769,40 @@ if (stopBtn) {
   await loadKeys();
   await loadAllowedSites();
   await loadModel();
+  // If a pinned folder disconnected, auto-recover to embedded storage so
+  // data collection works immediately without the user fixing anything.
+  const ws = await Workspace.getStatus();
+  if (ws.needsReconnect) {
+    await Workspace.useEmbeddedStorage();
+    addMessage('system',
+      `The workspace folder "${ws.location}" was disconnected (Chrome drops folder permission on restart). `
+      + 'Switched to embedded storage so files save immediately. You can re-pin a folder in Settings (⚙) anytime.',
+      { persist: false });
+  }
   updateWorkspaceStatus();
   updateDebugStatus();
 
   const restored = await restoreSession();
   if (restored) {
-    addMessage('system', 'Restored previous conversation.');
+    addMessage('system', 'Restored previous conversation.', { persist: false });
   } else {
-    addMessage('system', `Ask anything (${getModelLabel()}). I can also control this tab — e.g. "complete this course" — using native tool calling.`);
+    addMessage('system', 'Ask anything, or tell me what to do on this page.', { persist: false });
   }
 
   if (!getActiveKey()) {
     if (settingsPanel) settingsPanel.hidden = false;
-    addMessage('system', 'Set your DeepSeek API key in Settings (⚙) to start.');
+    settingsBtn?.setAttribute('aria-expanded', 'true');
+    addMessage('system', 'Set your DeepSeek API key in Settings (⚙) to start.', { persist: false });
   }
 
   try { await getActiveTab(); } catch (e) { debugEntry('init_active_tab_failed', { error: e.message }); }
-  updateDataStatus();
-  renderAllowCurrentSite();
-
-  // Default-deny is only humane if the user is told, once, why nothing happens.
-  if (!allowAllSites && !allowedSites.length) {
-    addMessage('system',
-      'No sites are approved yet, so I can read pages but not click, type, or run page code. '
-      + 'Use the "Allow <site>" button (or Settings → Allowed sites) to let me act on a site.');
+  // Auto-approve the active tab — the user is already on it, so trust it.
+  if (currentTab?.url?.startsWith('http') && !allowAllSites && !allowedSites.length) {
+    try { await Allowlist.grantHost(new URL(currentTab.url).hostname); const s = await Allowlist.loadAllowlist(); allowedSites = s.sites; allowAllSites = s.allowAll; } catch (_) {}
   }
+  updateDataStatus();
+  refreshRowCounter();
+  renderAllowCurrentSite();
 
   // Surface any background run that survived while the panel was closed.
   try {
@@ -3712,7 +3814,7 @@ if (stopBtn) {
       addActivity(null, active.status === 'awaiting_human' ? 'warn' : 'info',
         `Background run ${active.id}: ${active.status.toUpperCase()}`,
         `unit ${Math.min(active.pos.unitIndex + 1, active.plan.units.length)}/${active.plan.units.length} · ${active.counts.rows} rows${active.note ? ' — ' + active.note : ''}. Ask "run status" or "resume the run".`,
-        active.status === 'awaiting_human' ? 'warn' : '');
+        active.status === 'awaiting_human' ? 'warn' : '', false, false);
     }
   } catch (_) {}
 

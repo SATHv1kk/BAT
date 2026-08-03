@@ -96,6 +96,7 @@ import { compileGuardedRegex } from './regex-guard.js';
     const m = tabMonitors.get(source.tabId);
     if (m) m.enabled = false;
     debuggerAttached.delete(source.tabId);
+    cancelIdleWait(source.tabId);
   });
 
   // Per-tab buffers and attachment state must not outlive the tab.
@@ -205,12 +206,16 @@ import { compileGuardedRegex } from './regex-guard.js';
   }
 
   async function waitForPageIdle(tabId, timeoutMs = 5000) {
+    // Drop any waiter still registered for this tab BEFORE the early return.
+    // It used to happen only on the slow path, so an already-complete tab left
+    // the previous call's onUpdated listener and timer alive until they timed
+    // out on their own — one stale listener per interleaved wait.
+    cancelIdleWait(tabId);
     const tab = await chrome.tabs.get(tabId);
     if (tab.status === 'complete') {
       await delay(300);
       return true;
     }
-    cancelIdleWait(tabId);
     return new Promise((resolve) => {
       const cleanup = () => {
         chrome.tabs.onUpdated.removeListener(listener);
@@ -384,9 +389,8 @@ import { compileGuardedRegex } from './regex-guard.js';
     const target = frameId != null ? { tabId, frameIds: [frameId] } : { tabId, allFrames: true };
     const results = await executeScript(target, (ref) => {
       function findEl(r) {
-        const maps = [window.__batElementMap];
-        for (const map of maps) {
-          if (!map?.[r]) continue;
+        const map = window.__batElementMap;
+        if (map?.[r]) {
           const w = map[r];
           const el = typeof w.deref === 'function' ? w.deref() : w;
           if (el && document.contains(el)) return el;
@@ -406,17 +410,13 @@ import { compileGuardedRegex } from './regex-guard.js';
       const isCheckable = tag === 'input' && (el.type === 'checkbox' || el.type === 'radio')
         || role === 'checkbox' || role === 'radio';
 
-      if (typeof el.click === 'function') {
-        el.click();
-      } else {
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const opts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
-        el.dispatchEvent(new MouseEvent('mousedown', opts));
-        el.dispatchEvent(new MouseEvent('mouseup', opts));
-        el.dispatchEvent(new MouseEvent('click', opts));
-      }
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const opts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+      el.dispatchEvent(new MouseEvent('mousedown', opts));
+      el.dispatchEvent(new MouseEvent('mouseup', opts));
+      el.dispatchEvent(new MouseEvent('click', opts));
 
       if (isCheckable) {
         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -676,25 +676,87 @@ import { compileGuardedRegex } from './regex-guard.js';
       let target = (url || '').trim();
       if (!target) return { success: false, error: 'No URL' };
       if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
-      await chrome.tabs.update(tabId, { url: target });
+      let via = 'location.href';
+      let before;
+      try { before = (await chrome.tabs.get(tabId)).url; } catch { before = ''; }
+      try {
+        await executeScript({ tabId }, (dest) => { window.location.href = dest; }, [target]);
+      } catch (_) {
+        await chrome.tabs.update(tabId, { url: target });
+        via = 'tabs.update';
+      }
       await waitForPageIdle(tabId, 15000);
+      if (via === 'location.href') {
+        const after = (await chrome.tabs.get(tabId).catch(() => ({}))).url || '';
+        if (after === before) {
+          await chrome.tabs.update(tabId, { url: target });
+          await waitForPageIdle(tabId, 15000);
+          via = 'tabs.update (location.href blocked)';
+        }
+      }
+      // Probe whether the page actually loaded. Chrome error interstitials
+      // (anti-bot, rate-limit, blocked requests) reject executeScript with
+      // "Frame with ID 0 is showing error page" — report it so the model
+      // can switch to the page's own UI. Do NOT auto-go-back: the model
+      // decides when to navigate away.
+      let blocked = false;
+      try {
+        await executeScript({ tabId }, () => { return document.title; });
+      } catch (e) {
+        if (/error page/i.test(e?.message || '')) blocked = true;
+      }
+      if (blocked) {
+        return {
+          success: false,
+          error: 'The site blocked this URL with an error page (anti-bot). '
+            + 'Instead of navigating by URL, use the page\'s own UI: type into '
+            + 'search boxes, click sort dropdowns, and click page links via '
+            + 'left_click on refs. Call go_back first to return to the working page.'
+        };
+      }
       return { success: true, detail: 'navigated to ' + target };
     },
 
     async goBack(tabId) {
-      await chrome.tabs.goBack(tabId);
+      let before;
+      try { before = (await chrome.tabs.get(tabId)).url; } catch { before = ''; }
+      try {
+        await executeScript({ tabId }, () => { window.history.back(); });
+      } catch (_) {
+        await chrome.tabs.goBack(tabId);
+      }
       await waitForPageIdle(tabId, 8000);
+      const after = (await chrome.tabs.get(tabId).catch(() => ({}))).url || '';
+      if (after === before) {
+        await chrome.tabs.goBack(tabId);
+        await waitForPageIdle(tabId, 8000);
+      }
       return { success: true, detail: 'went back' };
     },
 
     async goForward(tabId) {
-      await chrome.tabs.goForward(tabId);
+      let before;
+      try { before = (await chrome.tabs.get(tabId)).url; } catch { before = ''; }
+      try {
+        await executeScript({ tabId }, () => { window.history.forward(); });
+      } catch (_) {
+        await chrome.tabs.goForward(tabId);
+      }
       await waitForPageIdle(tabId, 8000);
+      const after = (await chrome.tabs.get(tabId).catch(() => ({}))).url || '';
+      if (after === before) {
+        await chrome.tabs.goForward(tabId);
+        await waitForPageIdle(tabId, 8000);
+      }
       return { success: true, detail: 'went forward' };
     },
 
     async refresh(tabId) {
-      await chrome.tabs.reload(tabId);
+      try {
+        await executeScript({ tabId }, () => { window.location.reload(); });
+      } catch (_) {
+        await chrome.tabs.reload(tabId);
+      }
       await waitForPageIdle(tabId, 12000);
       return { success: true, detail: 'refreshed' };
     },

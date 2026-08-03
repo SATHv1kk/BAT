@@ -27,17 +27,25 @@ function deepSeekViaBackground(ctx, key, body) {
     }
     const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
     signal?.addEventListener('abort', onAbort, { once: true });
-    chrome.runtime.sendMessage({ type: 'BAT_DEEPSEEK_API', key, body }, (res) => {
+    let settled = false;
+    const done = (fn, val) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
+      fn(val);
+    };
+    const timer = setTimeout(() => done(reject, new Error('Background worker timed out after 30s — reload the extension')), 30000);
+    chrome.runtime.sendMessage({ type: 'BAT_DEEPSEEK_API', key, body }, (res) => {
       if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message || 'Extension messaging failed'));
+        done(reject, new Error(chrome.runtime.lastError.message || 'Extension messaging failed'));
         return;
       }
       if (!res) {
-        reject(new Error('No response from background worker — reload the extension'));
+        done(reject, new Error('No response from background worker — reload the extension'));
         return;
       }
-      resolve(res);
+      done(resolve, res);
     });
   });
 }
@@ -120,43 +128,52 @@ async function deepSeekStreamFetch(ctx, key, body, timeoutMs = API_TIMEOUT_MS, o
     let finishReason = null;
     let usage = null;
 
+    const consume = (line) => {
+      const t = line.trim();
+      if (!t.startsWith('data:')) return;
+      const payload = t.slice(5).trim();
+      if (payload === '[DONE]') return;
+      let chunk;
+      try { chunk = JSON.parse(payload); } catch { return; }
+      if (chunk.usage) usage = chunk.usage;
+      const choice = chunk.choices?.[0];
+      if (!choice) return;
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+      const d = choice.delta || {};
+      if (d.content) {
+        content += d.content;
+        onDelta?.(content, 'content');
+      }
+      if (d.reasoning_content) {
+        reasoning += d.reasoning_content;
+        if (!content) onDelta?.(reasoning, 'reasoning');
+      }
+      if (Array.isArray(d.tool_calls)) {
+        for (const tc of d.tool_calls) {
+          const i = tc.index ?? 0;
+          if (!toolAcc[i]) toolAcc[i] = { id: tc.id || 'call_' + i, type: 'function', function: { name: '', arguments: '' } };
+          if (tc.id) toolAcc[i].id = tc.id;
+          if (tc.function?.name) toolAcc[i].function.name += tc.function.name;
+          if (tc.function?.arguments) toolAcc[i].function.arguments += tc.function.arguments;
+        }
+      }
+    };
+
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
       buf = lines.pop();
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith('data:')) continue;
-        const payload = t.slice(5).trim();
-        if (payload === '[DONE]') continue;
-        let chunk;
-        try { chunk = JSON.parse(payload); } catch { continue; }
-        if (chunk.usage) usage = chunk.usage;
-        const choice = chunk.choices?.[0];
-        if (!choice) continue;
-        if (choice.finish_reason) finishReason = choice.finish_reason;
-        const d = choice.delta || {};
-        if (d.content) {
-          content += d.content;
-          onDelta?.(content, 'content');
-        }
-        if (d.reasoning_content) {
-          reasoning += d.reasoning_content;
-          if (!content) onDelta?.(reasoning, 'reasoning');
-        }
-        if (Array.isArray(d.tool_calls)) {
-          for (const tc of d.tool_calls) {
-            const i = tc.index ?? 0;
-            if (!toolAcc[i]) toolAcc[i] = { id: tc.id || 'call_' + i, type: 'function', function: { name: '', arguments: '' } };
-            if (tc.id) toolAcc[i].id = tc.id;
-            if (tc.function?.name) toolAcc[i].function.name += tc.function.name;
-            if (tc.function?.arguments) toolAcc[i].function.arguments += tc.function.arguments;
-          }
-        }
-      }
+      for (const line of lines) consume(line);
     }
+    // The tail was discarded when the loop ended, so a final SSE event that
+    // arrived without a trailing newline was dropped. Usually harmless on a
+    // content delta; on the last tool_call fragment it silently truncated the
+    // arguments JSON, and the loop then reported "malformed tool arguments" for
+    // a response the model had sent correctly.
+    buf += decoder.decode();
+    if (buf.trim()) consume(buf);
 
     const message = { role: 'assistant', content, reasoning_content: reasoning };
     const toolCalls = toolAcc.filter(Boolean);

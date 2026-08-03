@@ -288,7 +288,7 @@
         var included = shouldInclude(el, ctx) || (ctx.refId !== null && level === 0);
 
         if (included) {
-          var role = getRole(el);
+          var tag = el.tagName.toLowerCase();
           var name = getAccessibleName(el);
 
           // Reuse the ref already handed to the model for this element so refs
@@ -304,23 +304,33 @@
             ref = 'ref_' + (++window.__batRefCounter);
             window.__batElementMap[ref] = new WeakRef(el);
             window.__batElementReverseMap.set(el, ref);
-            // Mirrored into the DOM as a debugging/selector aid. Writing an
-            // attribute can throw (readonly or exotic nodes), and that must not
-            // abort the whole read.
             try { el.setAttribute('data-ext-ref', ref); } catch (attrErr) {}
           }
           count++;
 
-          var line = ' '.repeat(level) + role;
+          var line = ' '.repeat(level) + tag;
+          var explicitRole = el.getAttribute('role');
+          if (explicitRole && explicitRole !== tag) line += ' role="' + explicitRole + '"';
           if (name) {
             name = name.replace(/\s+/g, ' ').substring(0, NAME_MAX);
             line += ' "' + name.replace(/"/g, '\\"') + '"';
           }
           line += ' [' + ref + ']';
-          // Attributes the model needs to decide what a control does.
-          if (el.getAttribute('href')) line += ' href="' + el.getAttribute('href') + '"';
-          if (el.getAttribute('type')) line += ' type="' + el.getAttribute('type') + '"';
-          if (el.getAttribute('placeholder')) line += ' placeholder="' + el.getAttribute('placeholder') + '"';
+          // Attributes the model needs to decide what a control does OR
+          // to write extractor function_source without DOM exploration rounds.
+          if (el.getAttribute('href')) line += ' href="' + el.getAttribute('href').replace(/"/g, '\\"') + '"';
+          if (el.getAttribute('type')) line += ' type="' + el.getAttribute('type').replace(/"/g, '\\"') + '"';
+          if (el.getAttribute('placeholder')) line += ' placeholder="' + el.getAttribute('placeholder').replace(/"/g, '\\"') + '"';
+          var dataAt = el.getAttribute('data-at');
+          if (dataAt) line += ' data-at="' + dataAt.replace(/"/g, '\\"') + '"';
+          var dataTestId = el.getAttribute('data-testid');
+          if (dataTestId) line += ' data-testid="' + dataTestId.replace(/"/g, '\\"') + '"';
+          var elId = el.getAttribute('id');
+          if (elId) line += ' id="' + elId.replace(/"/g, '\\"') + '"';
+          var className = (el.getAttribute('class') || '').trim();
+          // Only worth the token when it's not a random hash (res-xxxx React class).
+          var meaningful = className.replace(/\bres-[a-z0-9]+\b/gi, '').trim();
+          if (meaningful) line += ' class="' + meaningful.replace(/"/g, '\\"') + '"';
           lines.push(line);
 
           // Enumerate options so select_option can be called with a valid value

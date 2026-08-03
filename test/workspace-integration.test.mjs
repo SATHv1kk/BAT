@@ -76,7 +76,81 @@ export default async function run(t) {
   const csvText = await Workspace.readFile('jobs.csv');
   t('the quoted csv header actually persisted correctly', csvText.startsWith('"Company, Inc",Title\n'));
 
-  // ── getStatus reports the embedded fallback honestly rather than as an error ──
+  // ── getStatus reports the embedded default honestly rather than as an error ──
   const status = await Workspace.getStatus();
   t('getStatus reports embedded mode, not a failure, when no folder was ever chosen', status.ok === true && status.embedded === true);
+  t('embedded storage is reported as a pinned-nothing default, not a pinned folder', status.pinned === false);
+  t('the embedded default never asks to be reconnected', status.needsReconnect === false);
+
+  // ── A PINNED folder is the fixed location: it is used, or the operation ──
+  // fails naming it. What it must never do is quietly redirect the write to
+  // embedded storage, which is what the old fallback did — that is how half a
+  // collection ended up in a folder and half inside the extension, with nothing
+  // but a settings line to say so.
+  //
+  // Pinning is simulated by writing a handle into the same IndexedDB record
+  // pickWorkspace writes, since showDirectoryPicker cannot run in Node.
+  // _setHandleForTest uses workspace.js's own cached connection so we never
+  // open a second one against the same DB (which fake-indexeddb blocks on).
+
+  await Workspace._setHandleForTest({
+    kind: 'directory',
+    name: 'pinned-workspace',
+    queryPermission: async () => 'prompt',
+    requestPermission: async () => 'prompt'
+  });
+
+  const disconnected = await Workspace.getStatus();
+  t('a pinned but unpermitted folder is reported as needing reconnection', disconnected.needsReconnect === true);
+  t('a disconnected folder is NOT reported as ok', disconnected.ok === false);
+  t('the disconnected status names the folder so the user knows which one', disconnected.location === 'pinned-workspace');
+
+  let writeErr = null;
+  try { await Workspace.writeFile('should-not-exist.txt', 'x'); } catch (e) { writeErr = e; }
+  t('writing with a disconnected pinned folder throws instead of silently redirecting', !!writeErr);
+  t('the throw is flagged as a disconnection, not a generic failure', writeErr?.workspaceDisconnected === true);
+  t('the error names the folder that is disconnected', /pinned-workspace/.test(writeErr?.message || ''));
+
+  let appendErr = null;
+  try { await Writer.appendRows('jobs.tsv', [{ Title: 'X', Company: 'Y' }]); } catch (e) { appendErr = e; }
+  t('appendRows refuses too, rather than writing rows to the other location', appendErr?.workspaceDisconnected === true);
+
+  await Workspace.useEmbeddedStorage();
+  const backToEmbedded = await Workspace.getStatus();
+  t('useEmbeddedStorage un-pins the folder', backToEmbedded.pinned === false && backToEmbedded.ok === true);
+
+  // The refused attempts must not have leaked into embedded storage.
+  const after = await Workspace.listFiles();
+  t('nothing was written to embedded storage while the folder was disconnected', !after.some(f => f.name === 'should-not-exist.txt'));
+  const jobsAfter = await Writer.getRowCount('jobs.tsv');
+  t('the refused append did not reach the embedded copy of the file', jobsAfter.rowCount === 2);
+
+  // ── A pinned AND granted folder is written to directly, with no detour ──
+  const written = [];
+  await Workspace._setHandleForTest({
+    kind: 'directory',
+    name: 'granted-workspace',
+    queryPermission: async () => 'granted',
+    requestPermission: async () => 'granted',
+    async getFileHandle(name) {
+      return {
+        kind: 'file',
+        name,
+        async getFile() { return { size: 0, lastModified: 0, async text() { return ''; } }; },
+        async createWritable() {
+          return { async write(d) { written.push([name, d]); }, async close() {} };
+        }
+      };
+    }
+  });
+
+  await Workspace.writeFile('pinned.txt', 'hello');
+  t('a granted pinned folder receives the write itself', written.some(([n, d]) => n === 'pinned.txt' && d === 'hello'));
+  const grantedStatus = await Workspace.getStatus();
+  t('a granted pinned folder reports as the fixed location', grantedStatus.ok === true && grantedStatus.location === 'granted-workspace');
+  t('a granted pinned folder is not embedded mode', grantedStatus.embedded === false);
+
+  await Workspace.useEmbeddedStorage();
+  const embeddedAfterPinnedWrite = await Workspace.listFiles();
+  t('the pinned write did not also land in embedded storage', !embeddedAfterPinnedWrite.some(f => f.name === 'pinned.txt'));
 }

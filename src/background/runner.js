@@ -67,8 +67,13 @@ function makePageBudget(initialMs) {
     token,
     arm,
     // Releasing the timer matters: a per-page setTimeout that outlives its page
-    // both leaks and needlessly holds the worker awake.
-    clear: () => { clearTimeout(timer); token.cancelled = true; }
+    // both leaks and needlessly holds the worker awake. Also resolve `expired`
+    // so Promise.race at L477 cannot hang if processPage is stuck.
+    clear: () => {
+      clearTimeout(timer);
+      token.cancelled = true;
+      fire({ outcome: 'stalled', note: 'page cancelled by clear (loop moved on)' });
+    }
   };
 }
 
@@ -456,6 +461,11 @@ async function runLoop(runId) {
         notifyPanel({ event: 'run_done', runId, counts: run.counts });
         await closeRunTab(run);
         await setBadge('');
+        // Clear the watchdog if no other runs are active.
+        const remaining = await Store.listRuns();
+        if (!remaining.some(r => r.id !== runId && r.status === 'running')) {
+          await chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
+        }
         break;
       }
       if (run.pos.page == null) {
@@ -574,25 +584,24 @@ export async function pauseRun(runId) {
 }
 
 // Can THIS context (the service worker) actually write files right now?
-// workspace.js falls back to embedded (IndexedDB) storage whenever a real
-// on-disk folder isn't currently granted, so this should now succeed in
-// practice even when the File System Access handle itself isn't writable
-// from a worker — but it's still proven up front rather than assumed, since
-// the whole embedded-storage path exists because "should always work" and
-// "does always work" are different claims. A failure here means rows still
-// accumulate in the store — export_rows from the panel catches the file up.
+// Proven up front rather than assumed, because the answer genuinely differs by
+// context: embedded storage (IndexedDB) works identically from the worker and
+// the panel, but a pinned on-disk folder's File System Access permission does
+// not carry into a worker at all. Either way rows still accumulate in the store
+// — export_rows from the panel catches the file up — so this is a warning at
+// run start, never a refusal to start.
 export async function checkWorkerFileAccess() {
   const probe = 'bat-write-probe.tmp';
   try {
     await writeFile(probe, 'worker write ok\n', { append: false });
     await removeFile(probe).catch(() => {}); // don't leave litter in the user's folder
-    return { ok: true, note: 'service worker CAN write to the workspace folder' };
+    return { ok: true, note: 'service worker CAN write to the workspace' };
   } catch (e) {
     return {
       ok: false,
       error: e.message,
-      note: 'service worker CANNOT write files — background runs will keep rows safe in the store, '
-        + 'but the output file only updates when you run export_rows from the panel'
+      note: 'the background runner cannot write files right now — ' + e.message
+        + ' Rows stay safe in BAT\'s store meanwhile; run export_rows from the panel to write them out.'
     };
   }
 }

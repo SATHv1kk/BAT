@@ -64,13 +64,27 @@
           if (!lower.includes(needle)) continue;
           // Mint a ref so this hit is actionable — a match the model can't
           // click just costs it a wasted re-read turn.
-          let ref = window.__batElementReverseMap?.get(el) || null;
+          //
+          // The maps are created here if absent rather than being optionally
+          // written to. find runs in EVERY frame, including ones the
+          // accessibility-tree content script never reached (it is what
+          // normally creates them), and there `__batElementReverseMap?.set(...)`
+          // silently did nothing: the forward map grew a new entry on every
+          // find while the reverse lookup kept missing, so the same element got
+          // a different ref each time and the model's earlier ref went stale
+          // for no reason. Storing a bare element instead of a WeakRef was the
+          // other half of it — the tree builder's sweep calls .deref() on every
+          // entry, so one such entry would throw and take the whole page read
+          // down with it.
+          if (!window.__batElementMap) window.__batElementMap = {};
+          if (!window.__batElementReverseMap) window.__batElementReverseMap = new WeakMap();
+          if (!window.__batRefCounter) window.__batRefCounter = 0;
+          let ref = window.__batElementReverseMap.get(el) || null;
+          if (ref && window.__batElementMap[ref]?.deref() !== el) ref = null;
           if (!ref) {
-            window.__batRefCounter = window.__batRefCounter || 0;
             ref = 'ref_' + (++window.__batRefCounter);
-            window.__batElementMap = window.__batElementMap || {};
-            window.__batElementMap[ref] = (typeof WeakRef === 'function') ? new WeakRef(el) : el;
-            window.__batElementReverseMap?.set(el, ref);
+            window.__batElementMap[ref] = new WeakRef(el);
+            window.__batElementReverseMap.set(el, ref);
             try { el.setAttribute('data-ext-ref', ref); } catch (_) {}
           }
           hits.push({
@@ -110,7 +124,7 @@
 
       for (const el of document.querySelectorAll('input[type="checkbox"], [role="checkbox"]')) {
         const s = window.getComputedStyle(el);
-        if (s.display === 'none') continue;
+        if (s.display === 'none' || s.visibility === 'hidden') continue;
         const lab = (el.closest('label')?.innerText || el.parentElement?.innerText || '')
           .replace(/\s+/g, ' ').trim().slice(0, 120);
         if (lab) {

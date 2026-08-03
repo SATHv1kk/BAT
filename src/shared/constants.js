@@ -11,7 +11,7 @@ export const MODEL_OPTIONS = [
   { id: 'deepseek-chat', label: 'V3' }
 ];
 
-export const MAX_STUCK = 8;
+export const MAX_STUCK = 20;
 // A page that fails to read at all (executeScript errors, a Chrome error
 // interstitial) is a stronger, faster dead-end signal than an unchanged tree
 // — the latter can legitimately repeat during a slow multi-step form flow,
@@ -19,8 +19,8 @@ export const MAX_STUCK = 8;
 // purpose: this used to have no ceiling at all, and a single bad URL could
 // burn a run's entire token budget in a blind retry loop before anything
 // stopped it.
-export const MAX_UNREADABLE = 6;
-export const MAX_STEPS = 200;
+export const MAX_UNREADABLE = 12;
+export const MAX_STEPS = 1000;
 
 // DeepSeek's chat API does not accept image input — the whole screenshot path
 // (CDP capture, base64 in session, screenshot tool) stays off until this flips.
@@ -35,12 +35,12 @@ export const VISION_SUPPORTED = false;
 // "how long this conversation has gotten" more than real cost, and
 // increasingly penalize exactly the long, many-step bulk-collection runs
 // this project exists for as the cached prefix grows.
-export const RUN_TOKEN_BUDGET = 400000;
+export const RUN_TOKEN_BUDGET = 4000000;
 
 // Separate pool for a background collection run: its only model spend is
 // extractor synthesis, so this bounds "how many sites may I learn" rather than
 // "how long may I converse".
-export const RUNNER_TOKEN_BUDGET = 300000;
+export const RUNNER_TOKEN_BUDGET = 2000000;
 
 // Extractor synthesis is the strong-model case; routine work is not.
 export const SYNTHESIS_MODEL = 'deepseek-v4-pro';
