@@ -24,10 +24,11 @@ not to a synthetic DOM event a page's own script could tell apart.
 
 ## Interface
 
-Diagrams above show the architecture; these show the panel itself. Built to match
-`sidepanel/index.html`'s actual markup and CSS exactly (colors, radii, type scale) — not
-screenshots of a running install, since a fresh clone starts with no API key and no
-collected data to show.
+The [architecture](#how-it-works) is diagrammed further down; this is the panel itself.
+These are mockups built directly against `sidepanel/index.html`'s real CSS (colors,
+radii, type scale) and against the exact strings `sidepanel/app.js` renders for each
+element — not screenshots of a running install, since a fresh clone starts with no API
+key and no collected data to show.
 
 <table>
 <tr>
@@ -89,6 +90,7 @@ and deletable, nothing invisible or permanent.
 - [Permissions](#permissions)
 - [Known limits of bulk collection](#known-limits-of-bulk-collection)
 - [Manual verification](#manual-verification)
+- [Acknowledgments](#acknowledgments)
 - [License](#license)
 
 ---
@@ -714,6 +716,15 @@ covers append/overwrite/read/list/remove there. This manual check is specificall
 
 (`npm run test:live` automates both.)
 </details>
+
+---
+
+## Acknowledgments
+
+Built with the help of AI coding assistants — [Claude Code](https://claude.com/claude-code)
+(Anthropic) and [OpenCode](https://opencode.ai) — and powered at runtime by the
+[DeepSeek](https://platform.deepseek.com/) API (see [Tech stack](#tech-stack) and
+[Configuration](#configuration) for how BAT actually uses it).
 
 ---
 

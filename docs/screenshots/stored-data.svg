@@ -7,38 +7,36 @@
   <text x="16" y="30" font-size="14" font-weight="700" fill="#1f1f1f">Stored data</text>
   <text x="376" y="30" font-size="14" text-anchor="end" fill="#6b7280">&#10005;</text>
 
-  <!-- Collections -->
-  <text x="16" y="70" font-size="11" font-weight="600" letter-spacing="0.4" fill="#6b7280">COLLECTIONS</text>
+  <!-- Collected data -->
+  <text x="16" y="70" font-size="11" font-weight="600" letter-spacing="0.4" fill="#6b7280">COLLECTED DATA</text>
   <line x1="16" y1="80" x2="384" y2="80" stroke="#e5e5e5"/>
   <text x="16" y="100" font-size="12" font-family="Consolas, ui-monospace, monospace" fill="#1f1f1f">jobs.tsv</text>
-  <text x="16" y="116" font-size="11" fill="#6b7280">96 unique rows · 12 duplicates merged</text>
-  <rect x="272" y="88" width="52" height="22" rx="5" fill="none" stroke="#e5e5e5"/>
-  <text x="298" y="103" font-size="10" text-anchor="middle" fill="#6b7280">Export</text>
-  <rect x="330" y="88" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
-  <text x="357" y="103" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
+  <text x="16" y="116" font-size="11" fill="#6b7280">96 unique row(s) · 12 duplicate(s) merged</text>
+  <rect x="330" y="90" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
+  <text x="357" y="105" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
   <line x1="16" y1="126" x2="384" y2="126" stroke="#e5e5e5"/>
 
-  <!-- Extractors -->
+  <!-- Cached extractors -->
   <text x="16" y="156" font-size="11" font-weight="600" letter-spacing="0.4" fill="#6b7280">CACHED EXTRACTORS</text>
   <line x1="16" y1="166" x2="384" y2="166" stroke="#e5e5e5"/>
-  <text x="16" y="186" font-size="11" font-family="Consolas, ui-monospace, monospace" fill="#1f1f1f">acme-robotics.example/careers/jobs/*</text>
-  <text x="16" y="202" font-size="11" fill="#6b7280">active · synthesized 2026-07-29</text>
-  <rect x="330" y="174" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
-  <text x="357" y="189" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
-  <rect x="16" y="210" width="368" height="66" rx="6" fill="#fafafa" stroke="#e5e5e5"/>
-  <text x="26" y="228" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">return [...document.querySelectorAll('.job-card')]</text>
-  <text x="26" y="242" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">  .map(c =&gt; ({</text>
-  <text x="26" y="256" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">    title: c.querySelector('h3')?.innerText,</text>
-  <text x="26" y="270" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">    location: c.querySelector('.loc')?.innerText }));</text>
+  <text x="16" y="186" font-size="10.5" font-family="Consolas, ui-monospace, monospace" fill="#1f1f1f">https://acme-robotics.example/careers/jobs/*</text>
+  <text x="16" y="202" font-size="11" fill="#6b7280">active · 1 retired version(s)</text>
+  <rect x="16" y="210" width="72" height="20" rx="5" fill="none" stroke="#e5e5e5"/>
+  <text x="52" y="224" font-size="10" text-anchor="middle" fill="#6b7280">Hide source</text>
+  <rect x="330" y="196" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
+  <text x="357" y="211" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
+  <rect x="16" y="238" width="368" height="66" rx="6" fill="#fafafa" stroke="#e5e5e5"/>
+  <text x="26" y="256" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">return [...document.querySelectorAll('.job-card')]</text>
+  <text x="26" y="270" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">  .map(c =&gt; ({</text>
+  <text x="26" y="284" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">    title: c.querySelector('h3')?.innerText,</text>
+  <text x="26" y="298" font-size="10" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">    location: c.querySelector('.loc')?.innerText }));</text>
 
   <!-- Runs -->
-  <text x="16" y="304" font-size="11" font-weight="600" letter-spacing="0.4" fill="#6b7280">RUNS</text>
-  <line x1="16" y1="314" x2="384" y2="314" stroke="#e5e5e5"/>
-  <text x="16" y="334" font-size="12" font-family="Consolas, ui-monospace, monospace" fill="#1f1f1f">run_9f2k3l</text>
-  <text x="16" y="350" font-size="11" fill="#6b7280">done · 5 units · 96 rows · 3 pages/unit avg</text>
-  <rect x="272" y="322" width="52" height="22" rx="5" fill="none" stroke="#e5e5e5"/>
-  <text x="298" y="337" font-size="10" text-anchor="middle" fill="#6b7280">Status</text>
-  <rect x="330" y="322" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
-  <text x="357" y="337" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
-  <line x1="16" y1="360" x2="384" y2="360" stroke="#e5e5e5"/>
+  <text x="16" y="332" font-size="11" font-weight="600" letter-spacing="0.4" fill="#6b7280">RUNS</text>
+  <line x1="16" y1="342" x2="384" y2="342" stroke="#e5e5e5"/>
+  <text x="16" y="362" font-size="12" font-family="Consolas, ui-monospace, monospace" fill="#1f1f1f">run_9f2k3l — DONE</text>
+  <text x="16" y="378" font-size="11" fill="#6b7280">jobs.tsv · unit 5/5 · 14 page(s) · 96 row(s)</text>
+  <rect x="330" y="350" width="54" height="22" rx="5" fill="none" stroke="#fecaca"/>
+  <text x="357" y="365" font-size="10" text-anchor="middle" fill="#b91c1c">Delete</text>
+  <line x1="16" y1="388" x2="384" y2="388" stroke="#e5e5e5"/>
 </svg>

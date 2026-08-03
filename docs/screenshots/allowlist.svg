@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="440" viewBox="0 0 400 440" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <rect width="400" height="440" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="420" viewBox="0 0 400 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="400" height="420" fill="#ffffff"/>
 
   <!-- header -->
   <rect x="0" y="0" width="400" height="52" fill="#ffffff"/>
@@ -9,36 +9,31 @@
   <rect x="344" y="14" width="28" height="24" rx="6" fill="none" stroke="#e5e5e5"/>
   <text x="358" y="31" font-size="14" text-anchor="middle" fill="#6b7280">&#9881;</text>
 
-  <!-- system pill -->
-  <rect x="100" y="76" width="200" height="24" rx="12" fill="#f4f4f4"/>
-  <text x="200" y="92" font-size="11" text-anchor="middle" fill="#6b7280">No sites are allowed yet</text>
-
   <!-- user message -->
-  <rect x="120" y="112" width="264" height="34" rx="16" fill="#d97757"/>
-  <text x="138" y="133" font-size="13" fill="#ffffff">click the "Apply now" button</text>
+  <rect x="120" y="66" width="264" height="34" rx="16" fill="#d97757"/>
+  <text x="138" y="87" font-size="13" fill="#ffffff">click the "Apply now" button</text>
 
   <!-- assistant message -->
-  <rect x="16" y="158" width="330" height="70" rx="16" fill="#f1f1f1"/>
-  <text x="30" y="180" font-size="13" fill="#1f1f1f">I can't click on</text>
-  <text x="30" y="198" font-size="13" fill="#1f1f1f">careers.acmerobotics.example yet —</text>
-  <text x="30" y="216" font-size="13" fill="#1f1f1f">reading and scrolling still work.</text>
+  <rect x="16" y="112" width="330" height="52" rx="16" fill="#f1f1f1"/>
+  <text x="30" y="134" font-size="13" fill="#1f1f1f">I can't click anything yet — no sites</text>
+  <text x="30" y="152" font-size="13" fill="#1f1f1f">are approved. Reading still works.</text>
 
-  <!-- activity: blocked (warn) -->
-  <rect x="16" y="244" width="368" height="86" rx="10" fill="#fffbeb" stroke="#fde68a"/>
-  <circle cx="34" cy="264" r="11" fill="#111111"/>
-  <text x="34" y="268" font-size="11" font-weight="600" text-anchor="middle" fill="#ffffff">!</text>
-  <text x="54" y="260" font-size="10" font-weight="700" letter-spacing="0.5" fill="#6b7280">WARNING</text>
-  <text x="54" y="276" font-size="13" font-weight="600" fill="#1f1f1f">Blocked by allowlist</text>
-  <text x="30" y="296" font-size="11" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">left_click blocked: "careers.acmerobotics.example"</text>
-  <text x="30" y="312" font-size="11" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">is not on the allowed-sites list.</text>
+  <!-- activity: blocked (warn), single-row top matching .activity-top flex layout -->
+  <rect x="16" y="180" width="368" height="78" rx="10" fill="#fffbeb" stroke="#fde68a"/>
+  <circle cx="34" cy="202" r="11" fill="#111111"/>
+  <text x="34" y="206" font-size="11" font-weight="600" text-anchor="middle" fill="#ffffff">!</text>
+  <text x="54" y="206" font-size="10" font-weight="700" letter-spacing="0.5" fill="#6b7280">WARNING</text>
+  <text x="112" y="207" font-size="13" font-weight="600" fill="#1f1f1f">Blocked by allowlist</text>
+  <text x="30" y="226" font-size="11" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">left_click on careers.acmerobotics.example:</text>
+  <text x="30" y="242" font-size="11" font-family="Consolas, ui-monospace, monospace" fill="#4b5563">no sites are allowed yet</text>
 
   <!-- input area -->
-  <rect x="12" y="360" width="354" height="44" rx="22" fill="#f8f8f8" stroke="#e5e5e5"/>
-  <text x="28" y="387" font-size="14" fill="#9ca3af">Message...</text>
-  <circle cx="366" cy="382" r="16" fill="#d1d5db"/>
-  <text x="366" y="387" font-size="14" text-anchor="middle" fill="#9ca3af">&#8593;</text>
+  <rect x="12" y="340" width="354" height="44" rx="22" fill="#f8f8f8" stroke="#e5e5e5"/>
+  <text x="28" y="367" font-size="14" fill="#9ca3af">Message...</text>
+  <circle cx="366" cy="362" r="16" fill="#d1d5db"/>
+  <text x="366" y="367" font-size="14" text-anchor="middle" fill="#9ca3af">&#8593;</text>
 
   <!-- allow button row -->
-  <rect x="12" y="412" width="230" height="24" rx="12" fill="#fffbeb" stroke="#fde68a"/>
-  <text x="127" y="428" font-size="11" font-weight="500" text-anchor="middle" fill="#92400e">Allow careers.acmerobotics.example</text>
+  <rect x="12" y="392" width="230" height="24" rx="12" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="127" y="408" font-size="11" font-weight="500" text-anchor="middle" fill="#92400e">Allow careers.acmerobotics.example</text>
 </svg>
