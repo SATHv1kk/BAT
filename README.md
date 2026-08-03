@@ -8,7 +8,7 @@ events.**
 [![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](LICENSE)
 [![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-459%20passing-brightgreen)](test/run-tests.mjs)
+[![Tests](https://img.shields.io/badge/tests-502%20passing-brightgreen)](test/run-tests.mjs)
 
 Give it a goal in plain language and it reads the current page, decides what to do, and
 drives the page for you — clicking, typing, scrolling, navigating, and, for larger jobs,
@@ -22,8 +22,61 @@ not to a synthetic DOM event a page's own script could tell apart.
 
 ---
 
+## Interface
+
+Diagrams above show the architecture; these show the panel itself. Built to match
+`sidepanel/index.html`'s actual markup and CSS exactly (colors, radii, type scale) — not
+screenshots of a running install, since a fresh clone starts with no API key and no
+collected data to show.
+
+<table>
+<tr>
+<td width="50%">
+
+**Agent loop, mid-task**
+<img src="docs/screenshots/chat-demo.svg" width="100%" alt="Chat panel showing a goal, the agent's read/execute/result activity feed, and a live status line">
+
+Every step reaches the activity feed as a compact, collapsible entry — not a wall of
+"Tool: X" / "Action succeeded" chat blocks.
+
+</td>
+<td width="50%">
+
+**Allowlist blocking an action**
+<img src="docs/screenshots/allowlist.svg" width="100%" alt="An unapproved site blocking a click, with the Allow-this-site button in the composer">
+
+Fails closed by default: page-changing tools refuse until you click **Allow**. Reading
+and scrolling never needed approval.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Settings**
+<img src="docs/screenshots/settings.svg" width="100%" alt="Settings panel: API key, model picker, site access, workspace folder, stored data">
+
+One panel behind the gear icon: API key, model, allowlist status, workspace folder
+(embedded storage by default), and stored-data management.
+
+</td>
+<td width="50%">
+
+**Stored-data manager**
+<img src="docs/screenshots/stored-data.svg" width="100%" alt="Stored data manager listing a collection, a cached extractor with its source, and a run">
+
+Every collection, cached extractor (source included), and background run — inspectable
+and deletable, nothing invisible or permanent.
+
+</td>
+</tr>
+</table>
+
+---
+
 ## Contents
 
+- [Interface](#interface)
 - [How it works](#how-it-works)
 - [Tech stack](#tech-stack)
 - [Features](#features)
@@ -164,7 +217,7 @@ CAPTCHAs and login walls are **detected, never solved** — the run parks in
 | Extractor safety | **[acorn](https://github.com/acornjs/acorn) + [acorn-walk](https://github.com/acornjs/acorn)** | Parses model-authored `extract_rows` source into a real AST so alias tracking (`var w = window; w.fetch(...)`) can be checked structurally, not by text pattern. |
 | Regex safety | **[safe-regex](https://github.com/substack/safe-regex)** (backed by **regexp-tree**) | Gates every model-authored regex (plan rules, filters) against catastrophic backtracking before it ever reaches `new RegExp`. |
 | Persistence | **IndexedDB** (rows/dedup, cached extractors, runs, event log, and — by default — file storage itself) · **File System Access API** (optional real workspace folder) · `chrome.storage.local` (settings) · `chrome.storage.session` (chat transcript) | The store is the authority for collected data; output files are a projection of it, never the other way round. File storage needs no OS permission at all by default — a real folder is an opt-in upgrade, not a requirement. |
-| Quality gates | **ESLint** (flat config) · a from-scratch Node test runner (`test/run-tests.mjs`, no framework dependency) · **fake-indexeddb** (dev-only, for real IndexedDB integration tests in Node) · GitHub Actions CI | 486 offline, deterministic assertions gate every push; a separate scheduled job hits four live ATS endpoints so third-party drift can't redden an unrelated PR. |
+| Quality gates | **ESLint** (flat config) · a from-scratch Node test runner (`test/run-tests.mjs`, no framework dependency) · **fake-indexeddb** (dev-only, for real IndexedDB integration tests in Node) · GitHub Actions CI | 502 offline, deterministic assertions gate every push; a separate scheduled job hits four live ATS endpoints so third-party drift can't redden an unrelated PR. |
 
 ---
 
@@ -351,7 +404,7 @@ npm run build      # production build to dist/
 npm run preview    # preview the built output
 
 npm run lint       # ESLint (flat config, eslint.config.js)
-npm test           # 486 offline assertions — deterministic, no network. Gates CI.
+npm test           # 502 offline assertions — deterministic, no network. Gates CI.
 npm run test:live  # only the live ATS checks (fetches four real job boards)
 npm run test:all   # both
 npm run check      # lint + test + build, i.e. what CI runs
@@ -411,7 +464,7 @@ src/
 Most of `lib/` is pure — importable and testable by plain Node with no browser globals at
 all. The handful that do touch browser APIs (`workspace.js`, `embedded-storage.js`,
 `state-store.js`) are tested against a real IndexedDB via `fake-indexeddb` instead of
-requiring an actual browser — which, combined with the pure modules, is what makes 486
+requiring an actual browser — which, combined with the pure modules, is what makes 502
 assertions possible without ever opening one.
 
 ---
