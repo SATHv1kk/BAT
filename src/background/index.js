@@ -5,6 +5,9 @@
 import { DEEPSEEK_API, API_TIMEOUT_MS } from '../shared/constants.js';
 import './runner.js'; // plan runner: background collection runs (state machine + watchdog)
 import { fetchBoard, discoverBoard } from '../lib/ats-adapters.js';
+import { install as installBus } from '../lib/bus.js';
+
+installBus();
 
 // ATS fetches run HERE because the panel CSP blocks cross-origin fetch.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

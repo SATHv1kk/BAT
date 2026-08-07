@@ -3155,9 +3155,6 @@ async function findCoordsByRegistryLabel(tabId, needle) {
     const coords = await getRefCoordinatesInFrame(tabId, entry.frameId, entry.localRef);
     if (coords) { bestScore = score; best = { ...coords, matchedRef: globalRef }; }
   }
-    const coords = await getRefCoordinatesInFrame(tabId, entry.frameId, entry.localRef);
-    if (coords) { bestScore = score; best = { ...coords, matchedRef: globalRef }; }
-  }
   return best;
 }
 

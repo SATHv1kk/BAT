@@ -92,18 +92,27 @@ function extractByType(nodes, typeName, fieldMap) {
   return null;
 }
 
-// Public API: given page HTML as a string, return structured product data.
-// Runs in-page so it has access to the real DOM — called via executeScript.
-export function parseJsonLdFromHtml(html) {
-  // Extract ALL json-ld blocks from the page
-  const re = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+// Public API: given page HTML OR raw JSON-LD text, return structured product data.
+export function parseJsonLdFromHtml(input) {
   const nodes = [];
-  let m;
-  while ((m = re.exec(html)) !== null) {
+  const trimmed = (input || '').trim();
+
+  // Try as raw JSON first (script innerText, how observePage passes it)
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      const parsed = JSON.parse(m[1]);
-      walkNode(parsed, nodes);
-    } catch (_) { /* broken JSON-LD — skip */ }
+      walkNode(JSON.parse(trimmed), nodes);
+    } catch (_) { /* not valid JSON, try HTML regex below */ }
+  }
+
+  // Fall back to HTML regex extraction (for full-page HTML)
+  if (!nodes.length) {
+    const re = /<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let m;
+    while ((m = re.exec(trimmed)) !== null) {
+      try {
+        walkNode(JSON.parse(m[1]), nodes);
+      } catch (_) { /* broken JSON-LD — skip */ }
+    }
   }
   if (!nodes.length) return null;
 
