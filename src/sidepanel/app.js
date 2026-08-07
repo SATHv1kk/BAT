@@ -29,7 +29,7 @@ import { runExtractor } from '../lib/extractor-exec.js';
 import { validatePlan, STOP_PATTERNS, fillTemplate } from '../lib/plan.js';
 import { SITE_CONFIGS } from '../shared/site-configs.js';
 import * as Allowlist from '../lib/allowlist.js';
-import { screenExtractorSource } from '../lib/extractor-screen.js';
+import { screenExtractorSource, normalizeExtractorSource } from '../lib/extractor-screen.js';
 import { compileGuardedRegex } from '../lib/regex-guard.js';
 import * as SiteVerify from '../lib/site-verification.js';
 import { buildSystemPrompt } from './prompt.js';
@@ -1366,7 +1366,7 @@ async function extractRowsTool(state, args, step) {
 
   // ── Synthesize / refresh ──
   if (args.function_source) {
-    const src = String(args.function_source);
+    const src = normalizeExtractorSource(String(args.function_source));
     // Screened BEFORE it runs and before it is cached. The source is authored by
     // the model from untrusted page markup, and the CDP path runs it in the
     // page's own realm with the page CSP bypassed — so "it produced valid rows"

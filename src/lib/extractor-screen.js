@@ -117,6 +117,25 @@ const DENIED = [
 
 const MAX_SOURCE_CHARS = 20000;
 
+// The model is told to write "a JS function BODY" but sometimes wraps it in
+// `function() { ... }` or markdown fences. Strip those so screening and
+// execution see the raw body — the model pays for the turn regardless.
+export function normalizeExtractorSource(src) {
+  let s = String(src || '').trim();
+  // Markdown fences
+  s = s.replace(/^```(?:javascript|js)?\s*\n?/i, '').replace(/\n?\s*```\s*$/i, '');
+  // function() { ... } wrapper with optional name
+  s = s.replace(/^(?:async\s+)?function\s*(?:\w+\s*)?\s*\(\s*\)\s*\{/, '');
+  s = s.replace(/\}\s*$/, '');
+  // arrow function wrapper: () => { ... }
+  const arrowMatch = s.match(/^\(\)\s*=>\s*\{/);
+  if (arrowMatch) {
+    s = s.slice(arrowMatch.index + arrowMatch[0].length);
+    s = s.replace(/\}\s*$/, '');
+  }
+  return s.trim();
+}
+
 // Returns { ok:true } or { ok:false, reason } — never throws, so a screen
 // failure can never be the thing that breaks a run.
 export function screenExtractorSource(src) {

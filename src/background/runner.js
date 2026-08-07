@@ -25,7 +25,7 @@ import { runExtractor } from '../lib/extractor-exec.js';
 import { RUNNER_TOKEN_BUDGET, SYNTHESIS_MODEL } from '../shared/constants.js';
 import { writeFile, removeFile } from '../lib/workspace.js';
 import { checkUrl } from '../lib/allowlist.js';
-import { screenExtractorSource } from '../lib/extractor-screen.js';
+import { screenExtractorSource, normalizeExtractorSource } from '../lib/extractor-screen.js';
 import { redactMarkup } from '../lib/redaction.js';
 
 // Page budgets are PHASE-AWARE. A single flat budget was a bug: navigation
@@ -257,7 +257,7 @@ async function synthesizeExtractor(run, tabId) {
     + `Page URL: ${sample.url}\n\nVisible text sample:\n${sample.text}\n\nSanitized HTML:\n${sample.html}`;
   const completion = await callModel(prompt);
   return {
-    source: completion.text.trim().replace(/^```(?:javascript|js)?\s*/i, '').replace(/\s*```\s*$/, ''),
+    source: normalizeExtractorSource(completion.text),
     tokens: completion.tokens
   };
 }

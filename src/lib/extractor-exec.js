@@ -14,7 +14,7 @@
 //
 // Both paths return the same shape: { ok, rows, pageTextLen, error?, via }.
 
-import { screenExtractorSource } from './extractor-screen.js';
+import { screenExtractorSource, normalizeExtractorSource } from './extractor-screen.js';
 
 const MAX_ROWS = 2000;
 const EVAL_BLOCKED_RE = /content security policy|unsafe-eval|evalerror|blocked|refused to evaluate|csp/i;
@@ -131,6 +131,7 @@ function withTruncationNote(res, via, note) {
 }
 
 export async function runExtractor(tabId, source) {
+  source = normalizeExtractorSource(source);
   const screened = screenExtractorSource(source);
   if (!screened.ok) {
     // Belt and braces: the panel and the runner both screen before they get
