@@ -19,6 +19,7 @@ export function normalizeHostPattern(raw) {
     .replace(/^https?:\/\//, '')
     .replace(/^\*\./, '')
     .replace(/\/.*$/, '')
+    .replace(/[?#].*$/, '')
     .replace(/:\d+$/, '');
 }
 

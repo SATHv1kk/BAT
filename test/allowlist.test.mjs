@@ -53,6 +53,9 @@ export default function run(t) {
   t('scheme stripped', normalizeHostPattern('https://acme.com') === 'acme.com');
   t('leading wildcard stripped', normalizeHostPattern('*.acme.com') === 'acme.com');
   t('path stripped', normalizeHostPattern('acme.com/jobs/x') === 'acme.com');
+  t('query string stripped', normalizeHostPattern('acme.com?utm_source=x') === 'acme.com');
+  t('fragment stripped', normalizeHostPattern('acme.com#section') === 'acme.com');
+  t('query after path stripped', normalizeHostPattern('acme.com/jobs?page=2') === 'acme.com');
   t('port stripped', normalizeHostPattern('acme.com:8080') === 'acme.com');
   t('case lowered', normalizeHostPattern('ACME.com') === 'acme.com');
   t('whitespace trimmed', normalizeHostPattern('  acme.com  ') === 'acme.com');
