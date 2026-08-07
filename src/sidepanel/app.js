@@ -3770,57 +3770,58 @@ if (stopBtn) {
 
 // ── Init ──────────────────────────────────────────────────────────
 (async function init() {
-  await loadKeys();
-  await loadAllowedSites();
-  await loadModel();
-  // If a pinned folder disconnected, auto-recover to embedded storage so
-  // data collection works immediately without the user fixing anything.
-  const ws = await Workspace.getStatus();
-  if (ws.needsReconnect) {
-    await Workspace.useEmbeddedStorage();
-    addMessage('system',
-      `The workspace folder "${ws.location}" was disconnected (Chrome drops folder permission on restart). `
-      + 'Switched to embedded storage so files save immediately. You can re-pin a folder in Settings (⚙) anytime.',
-      { persist: false });
-  }
-  updateWorkspaceStatus();
-  updateDebugStatus();
-
-  const restored = await restoreSession();
-  if (restored) {
-    addMessage('system', 'Restored previous conversation.', { persist: false });
-  } else {
-    addMessage('system', 'Ask anything, or tell me what to do on this page.', { persist: false });
-  }
-
-  if (!getActiveKey()) {
-    if (settingsPanel) settingsPanel.hidden = false;
-    settingsBtn?.setAttribute('aria-expanded', 'true');
-    addMessage('system', 'Set your DeepSeek API key in Settings (⚙) to start.', { persist: false });
-  }
-
-  try { await getActiveTab(); } catch (e) { debugEntry('init_active_tab_failed', { error: e.message }); }
-  // Auto-approve the active tab — the user is already on it, so trust it.
-  if (currentTab?.url?.startsWith('http') && !allowAllSites && !allowedSites.length) {
-    try { await Allowlist.grantHost(new URL(currentTab.url).hostname); const s = await Allowlist.loadAllowlist(); allowedSites = s.sites; allowAllSites = s.allowAll; } catch (_) {}
-  }
-  updateDataStatus();
-  refreshRowCounter();
-  renderAllowCurrentSite();
-
-  // Surface any background run that survived while the panel was closed.
   try {
-    const runs = await Store.listRuns();
-    const active = runs
-      .filter(r => ['running', 'awaiting_human', 'paused'].includes(r.status))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
-    if (active) {
-      addActivity(null, active.status === 'awaiting_human' ? 'warn' : 'info',
-        `Background run ${active.id}: ${active.status.toUpperCase()}`,
-        `unit ${Math.min(active.pos.unitIndex + 1, active.plan.units.length)}/${active.plan.units.length} · ${active.counts.rows} rows${active.note ? ' — ' + active.note : ''}. Ask "run status" or "resume the run".`,
-        active.status === 'awaiting_human' ? 'warn' : '', false, false);
+    await loadKeys();
+    await loadAllowedSites();
+    await loadModel();
+    const ws = await Workspace.getStatus();
+    if (ws.needsReconnect) {
+      addMessage('system',
+        `The workspace folder "${ws.location}" is disconnected (Chrome drops folder permission on restart). `
+        + 'Open Settings (⚙) and press "Reconnect folder" to resume writing files there, '
+        + 'or "Use embedded storage" to switch back. Collected rows are safe in the store regardless.',
+        { persist: false });
     }
-  } catch (_) {}
+    updateWorkspaceStatus();
+    updateDebugStatus();
+
+    const restored = await restoreSession();
+    if (restored) {
+      addMessage('system', 'Restored previous conversation.', { persist: false });
+    } else {
+      addMessage('system', 'Ask anything, or tell me what to do on this page.', { persist: false });
+    }
+
+    if (!getActiveKey()) {
+      if (settingsPanel) settingsPanel.hidden = false;
+      settingsBtn?.setAttribute('aria-expanded', 'true');
+      addMessage('system', 'Set your DeepSeek API key in Settings (⚙) to start.', { persist: false });
+    }
+
+    try { await getActiveTab(); } catch (e) { debugEntry('init_active_tab_failed', { error: e.message }); }
+    if (currentTab?.url?.startsWith('http') && !allowAllSites && !allowedSites.length) {
+      try { await Allowlist.grantHost(new URL(currentTab.url).hostname); const s = await Allowlist.loadAllowlist(); allowedSites = s.sites; allowAllSites = s.allowAll; } catch (_) {}
+    }
+    updateDataStatus();
+    refreshRowCounter();
+    renderAllowCurrentSite();
+
+    try {
+      const runs = await Store.listRuns();
+      const active = runs
+        .filter(r => ['running', 'awaiting_human', 'paused'].includes(r.status))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      if (active) {
+        addActivity(null, active.status === 'awaiting_human' ? 'warn' : 'info',
+          `Background run ${active.id}: ${active.status.toUpperCase()}`,
+          `unit ${Math.min(active.pos.unitIndex + 1, active.plan.units.length)}/${active.plan.units.length} · ${active.counts.rows} rows${active.note ? ' — ' + active.note : ''}. Ask "run status" or "resume the run".`,
+          active.status === 'awaiting_human' ? 'warn' : '', false, false);
+      }
+    } catch (_) {}
+  } catch (e) {
+    debugEntry('init_failed', { error: e?.message || String(e) });
+    addMessage('system', 'BAT failed to fully initialise — some features may be unavailable. Reload the extension (chrome://extensions) if problems persist.', { persist: false });
+  }
 
   promptInput.focus();
   updateSendEnabled();

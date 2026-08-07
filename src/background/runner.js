@@ -566,7 +566,7 @@ export async function startRun(runId) {
   const run = await Store.getRun(runId);
   if (!run) return { ok: false, error: 'run not found: ' + runId };
   if (run.status === 'running') {
-    runLoop(runId);
+    runLoop(runId).catch((e) => console.error('BAT runLoop attach failed:', e?.message || e));
     return { ok: true, note: 'already running — loop (re)attached' };
   }
   if (!['draft', 'paused', 'awaiting_human', 'failed'].includes(run.status)) {
@@ -577,7 +577,7 @@ export async function startRun(runId) {
   await Store.saveRun(run);
   await chrome.alarms.create(WATCHDOG_ALARM, { periodInMinutes: 0.5 });
   await setBadge('▶');
-  runLoop(runId);
+  runLoop(runId).catch((e) => console.error('BAT runLoop start failed:', e?.message || e));
   return { ok: true, note: 'running from unit ' + (run.pos.unitIndex + 1) + (run.pos.page != null ? ', page ' + run.pos.page : '') };
 }
 
@@ -661,7 +661,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
         chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
         return;
       }
-      for (const r of running) runLoop(r.id); // no-op if already looping here
+      for (const r of running) runLoop(r.id).catch((e) => console.error('BAT runLoop revive failed:', e?.message || e));
     } catch (_) {}
   };
 
