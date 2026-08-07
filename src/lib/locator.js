@@ -15,7 +15,7 @@ export function normalizeLabel(text) {
     .replace(/\s+/g, ' ')
     .replace(/[''']/g, '\'')
     .replace(/[""″]/g, '"')
-    .replace(/[\-–—]/g, ' ')
+    .replace(/[-–—]/g, ' ')
     .trim();
 }
 

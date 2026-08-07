@@ -37,7 +37,7 @@ import { activeToolDefs } from './tool-defs.js';
 import { callDeepSeekAPI } from './deepseek.js';
 import { parseJsonLdFromHtml } from '../lib/jsonld-parser.js';
 import { findBestRef } from '../lib/locator.js';
-import { install as installBus, CH } from '../lib/bus.js';
+import { install as installBus } from '../lib/bus.js';
 
 // Side panel entry: renders the chat UI and runs the agent loop.
 

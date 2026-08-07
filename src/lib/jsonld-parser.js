@@ -36,28 +36,9 @@ function resolveValue(v) {
   return '';
 }
 
-function extractOfferFields(offer) {
-  const out = {};
-  if (typeof offer === 'object' && offer) {
-    out.price = resolveValue(offer.price);
-    out.priceCurrency = resolveValue(offer.priceCurrency);
-    out.availability = resolveValue(offer.availability);
-    out.url = resolveValue(offer.url);
-    if (offer.seller) {
-      out.seller = resolveValue(offer.seller.name || offer.seller);
-    }
-    if (offer.itemCondition) {
-      out.itemCondition = resolveValue(offer.itemCondition);
-    }
-  }
-  return out;
-}
-
 // Walks a JSON-LD node. "@graph" arrays are flattened; nested @type objects
 // are followed one level deep.
 function walkNode(node, into = []) {
-  if (!node || typeof node !== 'object') return into;
-
   const items = Array.isArray(node) ? node : [node];
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;

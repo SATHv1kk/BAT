@@ -198,7 +198,7 @@
         if (s.display === 'none' || s.visibility === 'hidden') continue;
         const r = a.getBoundingClientRect();
         if (r.width < 2 && r.height < 2) continue;
-        let href = (a.href || '').trim();
+        const href = (a.href || '').trim();
         if (!href || href.startsWith('javascript:')) continue;
         if (hrefFilter && !href.toLowerCase().includes(hrefFilter)) continue;
         const key = href.slice(0, 2000);
