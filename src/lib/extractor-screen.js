@@ -59,6 +59,7 @@ import { screenExtractorSourceAst } from './extractor-ast-screen.js';
 
 const DENIED = [
   { re: /\bfetch\s*\(/,                          why: 'network access (fetch)' },
+  { re: /\b(?:fetch|eval|Function|setTimeout|setInterval)\s*`/, why: 'tagged template invocation (no-paren call)' },
   { re: /\bXMLHttpRequest\b/,                    why: 'network access (XMLHttpRequest)' },
   { re: /\bWebSocket\b/,                         why: 'network access (WebSocket)' },
   { re: /\bEventSource\b/,                       why: 'network access (EventSource)' },
@@ -89,7 +90,7 @@ const DENIED = [
   { re: /\bthis\b/,                              why: 'reference to `this` — resolves to the global object here and is not needed to read the DOM' },
   // Escaping identifier-based matching by indexing the global object
   // dynamically, e.g. window['fetch'] or self['ev'+'al'].
-  { re: /\b(?:window|self|globalThis|top|parent|frames)\s*\[/, why: 'dynamic property access on a global object (bracket notation)' },
+  { re: /\b(?:window|self|globalThis|top|parent|frames|document)\s*\[/, why: 'dynamic property access on a global object (bracket notation)' },
   // Reflect.get(globalThis, "fetch") and
   // Object.getOwnPropertyDescriptor(globalThis, "fetch").value retrieve a
   // named global property without ever writing `globalThis.fetch` or

@@ -11,11 +11,20 @@
 
 const TIMEOUT_MS = 15000;
 
+async function fetchWithRetry(url, opts = {}, retries = 1) {
+  let resp = await fetch(url, opts);
+  for (let i = 0; i < retries && resp.status === 429; i++) {
+    await new Promise(r => { setTimeout(r, 2000 * (i + 1)); });
+    resp = await fetch(url, opts);
+  }
+  return resp;
+}
+
 async function getJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const resp = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    const resp = await fetchWithRetry(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
     if (!resp.ok) return { ok: false, status: resp.status, error: `HTTP ${resp.status}` };
     return { ok: true, data: await resp.json() };
   } catch (e) {

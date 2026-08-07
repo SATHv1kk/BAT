@@ -640,6 +640,10 @@ async function executeAgentAction(tabId, action) {
     case 'refresh':
       return BT.refresh(tabId);
     case 'javascript': {
+      const jsScreen = screenExtractorSource(action.value);
+      if (!jsScreen.ok) {
+        return { success: false, error: 'javascript blocked by safety screen: ' + jsScreen.reason };
+      }
       let frameId = null;
       if (action.ref) {
         const t = await resolveRefTarget(tabId, action.ref);

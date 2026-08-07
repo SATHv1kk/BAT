@@ -3,11 +3,16 @@
 export function parseAgentResponse(raw) {
   try {
     let s = raw.trim();
-    const a = s.indexOf('{'), b = s.lastIndexOf('}');
+    const a1 = s.indexOf('{'), a2 = s.indexOf('[');
+    const a = a1 === -1 ? a2 : a2 === -1 ? a1 : Math.min(a1, a2);
+    const b = a === -1 ? -1 : (a === a1 ? s.lastIndexOf('}') : s.lastIndexOf(']'));
     if (a !== -1 && b > a) s = s.slice(a, b + 1);
     s = s.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/m, '').trim();
     s = s.replace(/,(\s*[}\]])/g, '$1');
     const parsed = JSON.parse(s);
+    if (Array.isArray(parsed)) {
+      return { action: 'batch', actions: parsed, text: '' };
+    }
     if (Array.isArray(parsed.actions) && !parsed.action) {
       return { action: 'batch', actions: parsed.actions, text: parsed.text || '' };
     }

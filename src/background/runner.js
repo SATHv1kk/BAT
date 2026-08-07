@@ -86,6 +86,13 @@ async function pacePerHost(url) {
   const wait = (lastHostHitAt.get(host) || 0) + HOST_MIN_INTERVAL_MS - Date.now();
   if (wait > 0) await delay(wait);
   lastHostHitAt.set(host, Date.now());
+  // Prune stale entries so the map doesn't grow without bound over long runs.
+  if (lastHostHitAt.size > 200) {
+    const cutoff = Date.now() - 60000;
+    for (const [h, ts] of lastHostHitAt) {
+      if (ts < cutoff) lastHostHitAt.delete(h);
+    }
+  }
 }
 
 // ── Chrome-side helpers ───────────────────────────────────────────
@@ -401,6 +408,7 @@ async function processPage(run, unit, budget = { token: { cancelled: false }, ar
   let fresh = 0;
   let merged = 0;
   if (rows.length) {
+    stop(); // re-check before committing rows — budget may have expired during extraction
     const sourceField = run.plan.source_field || 'source';
     const res = await Store.addRows(safeName(run.plan.filename), rows, {
       dedupFields: run.plan.dedup_fields,

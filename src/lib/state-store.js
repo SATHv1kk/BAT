@@ -125,7 +125,9 @@ const collectionLocks = new Map();
 function withCollectionLock(collection, fn) {
   const prev = collectionLocks.get(collection) || Promise.resolve();
   const run = prev.then(fn, fn);
-  collectionLocks.set(collection, run.then(() => {}, () => {}));
+  const cleanup = run.then(() => {}, () => {});
+  collectionLocks.set(collection, cleanup);
+  cleanup.then(() => { if (collectionLocks.get(collection) === cleanup) collectionLocks.delete(collection); });
   return run;
 }
 

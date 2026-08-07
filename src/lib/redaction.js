@@ -53,7 +53,7 @@ export function isSensitiveField(field) {
 
 // Matches one <input ...> tag. The `|$` alternative also catches an unterminated
 // tag at end of input, so a truncated document cannot smuggle a value through.
-const INPUT_TAG_RE = /<input\b[^>]*(?:>|$)/gi;
+const INPUT_TAG_RE = /<input\b(?:[^>"']*(?:"[^"]*"|'[^']*'))*[^>]*(?:>|$)/gi;
 
 // Attribute readers. Handle double-quoted, single-quoted and bare values, and
 // tolerate a missing closing quote (`"?`) in malformed markup. The leading

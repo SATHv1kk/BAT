@@ -286,7 +286,9 @@ const fileLocks = new Map();
 export function withFileLock(name, fn) {
   const prev = fileLocks.get(name) || Promise.resolve();
   const run = prev.then(fn, fn);
-  fileLocks.set(name, run.then(() => {}, () => {}));
+  const cleanup = run.then(() => {}, () => {});
+  fileLocks.set(name, cleanup);
+  cleanup.then(() => { if (fileLocks.get(name) === cleanup) fileLocks.delete(name); });
   return run;
 }
 

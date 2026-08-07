@@ -274,7 +274,11 @@ export function screenExtractorSourceAst(src) {
       if (node.computed && node.property.type !== 'Literal'
           && (resolvesToGlobalIdentity(node.object, globalAliases)
             || resolvesToDocumentIdentity(node.object, globalAliases, documentAliases))) {
-        flag('dynamic (computed, non-literal) property access on a global object');
+        if (node.property.type === 'BinaryExpression') {
+          flag('dynamic (computed, string concatenation) property access on a global object');
+        } else {
+          flag('dynamic (computed, non-literal) property access on a global object');
+        }
         return;
       }
       // X.fetch / X["fetch"] / X.eval / X["eval"] reached via an alias — the

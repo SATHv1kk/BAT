@@ -19,7 +19,9 @@ export function patternForUrl(url) {
 // column shows up here even when the extractor still "works".
 export function schemaFingerprintOf(rows) {
   if (!Array.isArray(rows) || !rows.length) return '';
-  return Object.keys(rows[0]).sort().join('|');
+  const keys = new Set();
+  for (const row of rows) Object.keys(row).forEach(k => keys.add(k));
+  return Array.from(keys).sort().join('|');
 }
 
 export const REPLAY_DEFAULTS = {
