@@ -15,6 +15,7 @@ export function buildSystemPrompt({ visionEnabled, nativeToolsEnabled }) {
 
 CORE RULES
 - Always read the page first.
+- Stay on the current tab — use navigate for URLs, type+click to search from the page. Never open_tab unless the user explicitly asks for a background tab.
 - Navigate only when there's no clickable link to your destination.
 - Collect data with collect_rows (deduplicates) or append_rows (raw append).
 - Run JavaScript for anything the other tools can't do.${nativeToolsEnabled ? '' : '\n' + LEGACY_PROTOCOL}`;

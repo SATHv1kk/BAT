@@ -165,9 +165,90 @@
     }));
   }
 
+  // Bulk link scan — one call returns every visible link on the page with its
+  // text, URL and ref so the model never needs to hunt through the DOM manually.
+  // Covers `<a href>`, elements with data-url/data-href/data-link attributes,
+  // and JS-product-viewer cards that wrap the link around a child element.
+  async function getLinks(tabId, { maxResults = 120, hrefContains = null } = {}) {
+    const results = await executeScript({ tabId, allFrames: true }, (maxResults, hrefContains) => {
+      const hits = [];
+      // Mint refs for elements we return so the model can click them
+      if (!window.__batElementMap) window.__batElementMap = {};
+      if (!window.__batElementReverseMap) window.__batElementReverseMap = new WeakMap();
+      if (!window.__batRefCounter) window.__batRefCounter = 0;
+      function mintRef(el) {
+        let ref = window.__batElementReverseMap.get(el) || null;
+        if (ref && window.__batElementMap[ref]?.deref() !== el) ref = null;
+        if (!ref) {
+          ref = 'ref_' + (++window.__batRefCounter);
+          window.__batElementMap[ref] = new WeakRef(el);
+          window.__batElementReverseMap.set(el, ref);
+          try { el.setAttribute('data-ext-ref', ref); } catch (_) {}
+        }
+        return ref;
+      }
+
+      const seen = new Set();
+      const hrefFilter = hrefContains ? hrefContains.toLowerCase() : null;
+
+      // Pass 1: every <a> with an href
+      for (const a of document.querySelectorAll('a[href]')) {
+        if (hits.length >= maxResults) break;
+        const s = window.getComputedStyle(a);
+        if (s.display === 'none' || s.visibility === 'hidden') continue;
+        const r = a.getBoundingClientRect();
+        if (r.width < 2 && r.height < 2) continue;
+        let href = (a.href || '').trim();
+        if (!href || href.startsWith('javascript:')) continue;
+        if (hrefFilter && !href.toLowerCase().includes(hrefFilter)) continue;
+        const key = href.slice(0, 2000);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const text = (a.innerText || a.textContent || a.getAttribute('aria-label') || a.title || '')
+          .replace(/\s+/g, ' ').trim().slice(0, 160);
+        hits.push({
+          ref: mintRef(a), text, href: href.slice(0, 600),
+          tag: 'a', frameUrl: location.href
+        });
+      }
+
+      // Pass 2: elements with data-url / data-href / data-link (product viewer cards)
+      if (hits.length < maxResults) {
+        for (const el of document.querySelectorAll('[data-url], [data-href], [data-link]')) {
+          if (hits.length >= maxResults) break;
+          const s = window.getComputedStyle(el);
+          if (s.display === 'none' || s.visibility === 'hidden') continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < 2 && r.height < 2) continue;
+          const href = (
+            el.getAttribute('data-url') || el.getAttribute('data-href') || el.getAttribute('data-link') || ''
+          ).trim();
+          if (!href) continue;
+          if (hrefFilter && !href.toLowerCase().includes(hrefFilter)) continue;
+          const key = href.slice(0, 2000);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const text = (el.innerText || el.textContent || el.getAttribute('aria-label') || '')
+            .replace(/\s+/g, ' ').trim().slice(0, 100);
+          hits.push({
+            ref: mintRef(el), text, href: href.slice(0, 600),
+            tag: 'data-url', frameUrl: location.href
+          });
+        }
+      }
+
+      return hits;
+    }, [maxResults, hrefContains]);
+
+    return (results || []).flatMap(r =>
+      (r.result || []).map(h => ({ ...h, frameId: r.frameId }))
+    );
+  }
+
   window.PageTools = {
     findOnPage,
     getEnrichedPageText,
-    mapCheckboxRefs
+    mapCheckboxRefs,
+    getLinks
   };
 })();

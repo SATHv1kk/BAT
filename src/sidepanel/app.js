@@ -1551,6 +1551,25 @@ async function runTool(state, name, args, step, opts = {}) {
     }
   }
 
+  if (name === 'get_links') {
+    const PT = window.PageTools;
+    if (!PT?.getLinks) return 'Link scanner unavailable — PageTools not loaded.';
+    try {
+      const rawHits = await PT.getLinks(state.tabId, {
+        maxResults: args.max_results ?? 120,
+        hrefContains: args.href_contains || null
+      });
+      const hits = globalizeFindHits(state.tabId, rawHits);
+      if (!hits.length) {
+        return 'No visible links found' + (args.href_contains ? ` matching "${args.href_contains}"` : '') + '.';
+      }
+      const lines = hits.map(h => `${h.ref}: ${h.text || '(no text)'} → ${h.href}`);
+      return `${hits.length} link(s) found:\n${lines.join('\n')}`.slice(0, 8000);
+    } catch (e) {
+      return `get_links failed: ${e.message}`;
+    }
+  }
+
   if (name === 'extract_rows') {
     try {
       return await extractRowsTool(state, args, step);
