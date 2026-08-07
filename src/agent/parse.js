@@ -1,12 +1,49 @@
 /** Parse model JSON action responses into normalized action objects. */
 
+// Scan for complete top-level JSON blobs (object or array) in a string,
+// respecting strings/escapes. Returns the LAST complete blob: a model reply
+// can carry an example array before its real payload ("do [..] like this,
+// then {"action":..}") — the real payload comes last, so executing the
+// example would be a wrong click.
+function lastJsonBlob(s) {
+  let best = null;
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch !== '{' && ch !== '[') { i++; continue; }
+    const close = ch === '{' ? '}' : ']';
+    let depth = 0;
+    let inStr = false;
+    let j = i;
+    for (; j < s.length; j++) {
+      const c = s[j];
+      if (inStr) {
+        if (c === '\\') { j++; continue; }
+        if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') { inStr = true; continue; }
+      if (c === ch) depth++;
+      else if (c === close) {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    if (depth === 0 && j > i) {
+      best = s.slice(i, j + 1);
+      i = j + 1;
+      continue;
+    }
+    i++;
+  }
+  return best;
+}
+
 export function parseAgentResponse(raw) {
   try {
     let s = raw.trim();
-    const a1 = s.indexOf('{'), a2 = s.indexOf('[');
-    const a = a1 === -1 ? a2 : a2 === -1 ? a1 : Math.min(a1, a2);
-    const b = a === -1 ? -1 : (a === a1 ? s.lastIndexOf('}') : s.lastIndexOf(']'));
-    if (a !== -1 && b > a) s = s.slice(a, b + 1);
+    const blob = lastJsonBlob(s);
+    if (blob) s = blob;
     s = s.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/m, '').trim();
     s = s.replace(/,(\s*[}\]])/g, '$1');
     const parsed = JSON.parse(s);

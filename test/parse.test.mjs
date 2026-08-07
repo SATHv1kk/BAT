@@ -16,6 +16,8 @@ export default function run(t) {
   t('unparseable text degrades to wait', parseAgentResponse('no json here').action === 'wait');
   t('degraded wait keeps the raw text', parseAgentResponse('hello there').text === 'hello there');
   t('actions array becomes a batch', parseAgentResponse('{"actions":[{"action":"wait"}]}').action === 'batch');
+  t('top-level array of objects becomes a batch', parseAgentResponse('[{"action":"wait"},{"action":"scroll_down"}]').action === 'batch');
+  t('example array before real json ignored', parseAgentResponse('Example: [{"action":"left_click","ref":"ref_1"}] then real: {"action":"refresh"}').action === 'refresh');
   t('empty string degrades to wait', parseAgentResponse('').action === 'wait');
 
   // ── alias normalization ──
