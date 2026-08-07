@@ -35,6 +35,9 @@ import * as SiteVerify from '../lib/site-verification.js';
 import { buildSystemPrompt } from './prompt.js';
 import { activeToolDefs } from './tool-defs.js';
 import { callDeepSeekAPI } from './deepseek.js';
+import { parseJsonLdFromHtml } from '../lib/jsonld-parser.js';
+import { findBestRef } from '../lib/locator.js';
+import { install as installBus, CH } from '../lib/bus.js';
 
 // Side panel entry: renders the chat UI and runs the agent loop.
 
@@ -2630,8 +2633,33 @@ const OBSERVE_FUNC = (courseMode) => {
     tree: null,
     text: (document.body?.innerText || '').substring(0, 12000),
     checkboxes: [],
-    extras: []
+    extras: [],
+    jsonld: null
   };
+
+  // JSON-LD structured data — product name/price/brand from schema.org markup
+  try {
+    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const s of scripts) {
+      if (out.jsonld) break;
+      try {
+        const d = JSON.parse(s.textContent || '');
+        const nodes = Array.isArray(d['@graph']) ? d['@graph'] : (d['@graph'] ? [d['@graph']] : [d]);
+        if (d['@type'] && !d['@graph']) nodes.unshift(d);
+        for (const n of nodes) {
+          if (!n || typeof n !== 'object') continue;
+          const rawType = n['@type'];
+          const types = Array.isArray(rawType) ? rawType : (rawType ? [rawType] : []);
+          const isProduct = types.some(function(t){ return /Product$/i.test(t) || /\/Product$/i.test(t); });
+          const isOffer = types.some(function(t){ return /Offer$/i.test(t); });
+          if (isProduct || isOffer) {
+            out.jsonld = s.textContent;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
 
   // Gathered unconditionally in THIS pass. It used to require a second
   // all-frames injection (PageTools.getEnrichedPageText) decided after the
@@ -2767,6 +2795,12 @@ async function getPageContent(tabId) {
 
     const extras = [...new Set(frames.flatMap(r => r.result.extras || []))];
 
+    // Parse JSON-LD from the main frame if present
+    let jsonldProduct = null;
+    if (main.result.jsonld) {
+      try { jsonldProduct = parseJsonLdFromHtml(main.result.jsonld); } catch (_) {}
+    }
+
     return {
       title: main.result.title,
       url: main.result.url,
@@ -2774,6 +2808,7 @@ async function getPageContent(tabId) {
       accessibilityTree,
       checkboxSummary,
       extras,
+      jsonldProduct,
       frameCount: frames.length,
       treeFrameCount: frames.filter(r => (r.result.tree?.length || 0) > 0).length
     };
@@ -3096,6 +3131,18 @@ async function findCoordsByRegistryLabel(tabId, needle) {
   let best = null;
   let bestScore = 0;
 
+  const ranked = findBestRef(registry, needle);
+  if (ranked) {
+    // Skip question-like labels and resume/restart mismatch
+    const lab = (ranked.label || '').toLowerCase();
+    if (/^question\s*[(:]/i.test(lab) || /single choice question/i.test(lab)) return null;
+    if ((lower === 'resume' || lower === 'restart') && lab !== lower) return null;
+    if (ranked.label.length > 140 && ranked.role !== 'radio' && ranked.role !== 'checkbox' && ranked.tag !== 'input') return null;
+    const coords = await getRefCoordinatesInFrame(tabId, ranked.frameId, ranked.localRef);
+    if (coords) return { ...coords, matchedRef: ranked.ref };
+  }
+
+  // Fallback: full registry scan for backward compatibility with resume/restart strict matching
   for (const [globalRef, entry] of Object.entries(registry)) {
     const lab = (entry.label || '').replace(/\s+/g, ' ').trim().toLowerCase();
     if (!lab || /^question\s*[(:]/i.test(lab) || /single choice question/i.test(lab)) continue;
@@ -3105,6 +3152,9 @@ async function findCoordsByRegistryLabel(tabId, needle) {
       : lab.includes(lower) ? lower.length + 100
       : lower.includes(lab.slice(0, 40)) ? lab.length : 0;
     if (score <= bestScore) continue;
+    const coords = await getRefCoordinatesInFrame(tabId, entry.frameId, entry.localRef);
+    if (coords) { bestScore = score; best = { ...coords, matchedRef: globalRef }; }
+  }
     const coords = await getRefCoordinatesInFrame(tabId, entry.frameId, entry.localRef);
     if (coords) { bestScore = score; best = { ...coords, matchedRef: globalRef }; }
   }
@@ -3421,6 +3471,22 @@ function buildPageContext(goal, pageData, tabId = null, resumeClickStreak = 0) {
     ctx += '\n\ncheckbox state:\n' + checkboxSummary.map((c, i) =>
       `${i + 1}. [${c.checked ? 'CHECKED' : 'unchecked'}] ${c.label}`
     ).join('\n');
+  }
+
+  // Structured product data from JSON-LD (schema.org Product/Offer markup)
+  if (pageData?.jsonldProduct) {
+    const p = pageData.jsonldProduct;
+    const parts = [];
+    if (p.name) parts.push(`Product: ${p.name}`);
+    if (p.brand) parts.push(`Brand: ${p.brand}`);
+    if (p.price) parts.push(`Price: ${p.price} ${p.currency || ''}`);
+    if (p.seller) parts.push(`Seller: ${p.seller}`);
+    if (p.sku) parts.push(`SKU: ${p.sku}`);
+    if (p.availability) parts.push(`Available: ${p.availability}`);
+    if (p.rating) parts.push(`Rating: ${p.rating}/5 (${p.reviewCount || '0'} reviews)`);
+    if (p.lowPrice && p.highPrice) parts.push(`Price range: ${p.lowPrice}–${p.highPrice} ${p.currency || ''}`);
+    if (p.description) parts.push(`Description: ${p.description.slice(0, 300)}`);
+    if (parts.length) ctx += '\n\n## Structured product data (from page JSON-LD):\n' + parts.join('\n');
   }
 
   if (goal) ctx += `\n\nGoal: ${goal}`;
@@ -3789,6 +3855,7 @@ if (stopBtn) {
 
 // ── Init ──────────────────────────────────────────────────────────
 (async function init() {
+  installBus();
   try {
     await loadKeys();
     await loadAllowedSites();
