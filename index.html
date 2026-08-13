@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BAT — Browser Automation Tool</title>
+<meta name="description" content="BAT is a Chrome extension that runs a browser automation agent in a side panel. It reads any page through an accessibility tree, reasons with DeepSeek, and drives the browser with native tool calls.">
+<link rel="icon" type="image/svg+xml" href="assets/bat-icon.svg">
+<style>
+  :root {
+    --bg: #0c0d0f;
+    --panel: #121417;
+    --panel-2: #16181c;
+    --border: #23262c;
+    --border-soft: #1b1e23;
+    --text: #e9ebee;
+    --muted: #9aa2ab;
+    --dim: #6b7280;
+    --accent: #d97757;
+    --accent-soft: rgba(217, 119, 87, .12);
+    --ok: #4ade80;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --maxw: 1080px;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(1200px 500px at 50% -8%, rgba(217,119,87,.10), transparent 60%),
+      radial-gradient(900px 400px at 85% 110%, rgba(217,119,87,.05), transparent 55%);
+  }
+  ::selection { background: var(--accent); color: #0c0d0f; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, .mono { font-family: var(--mono); }
+
+  /* ── Layout scaffolding ── */
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+  section { padding: 88px 0 24px; }
+
+  /* ── Nav ── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(12,13,15,.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .nav-inner {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-decoration: none;
+  }
+  .brand img { width: 26px; height: 26px; display: block; }
+  .brand:hover { text-decoration: none; }
+  .nav-links { display: flex; align-items: center; gap: 22px; }
+  .nav-links a {
+    color: var(--muted);
+    font-size: 13.5px;
+    font-weight: 500;
+    letter-spacing: .01em;
+  }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  .nav-links .gh { color: var(--text); }
+  .nav-links .gh .arr { color: var(--accent); }
+
+  /* ── Hero ── */
+  .hero { padding-top: 110px; text-align: center; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 7px 14px;
+    border-radius: 999px;
+    margin-bottom: 28px;
+  }
+  .eyebrow .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 10px var(--ok);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(64px, 13vw, 150px);
+    line-height: .95;
+    letter-spacing: -.04em;
+    font-weight: 800;
+    background: linear-gradient(180deg, #fff, #b9bec6);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tagline {
+    max-width: 620px;
+    margin: 26px auto 0;
+    font-size: clamp(17px, 2.2vw, 20px);
+    color: var(--muted);
+    line-height: 1.65;
+  }
+  .tagline b { color: var(--text); font-weight: 600; }
+  .tagline code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: .88em;
+    color: var(--accent);
+  }
+
+  .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block;
+    padding: 13px 26px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary {
+    background: var(--accent);
+    color: #0c0d0f;
+  }
+  .btn-primary:hover { box-shadow: 0 8px 30px rgba(217,119,87,.35); }
+  .btn-ghost {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { background: var(--panel-2); }
+
+  /* ── Terminal card ── */
+  .terminal {
+    max-width: 640px;
+    margin: 54px auto 0;
+    text-align: left;
+    background: #0a0b0d;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,.5);
+  }
+  .terminal-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--panel);
+  }
+  .terminal-head i {
+    width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+  }
+  .terminal-head i:nth-child(1) { background: #ff5f57; }
+  .terminal-head i:nth-child(2) { background: #febc2e; }
+  .terminal-head i:nth-child(3) { background: #28c840; }
+  .terminal-head span { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .terminal-body { padding: 20px 22px 22px; font-family: var(--mono); font-size: 13.5px; line-height: 1.9; overflow-x: auto; }
+  .terminal-body .c { color: var(--muted); }
+  .terminal-body .p { color: var(--accent); }
+  .terminal-body .ok { color: var(--ok); }
+  .terminal-body .w { color: var(--text); }
+
+  /* ── Section headers ── */
+  .sec-label {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  h2 {
+    margin: 0 0 14px;
+    font-size: clamp(28px, 4vw, 40px);
+    letter-spacing: -.02em;
+    line-height: 1.15;
+    font-weight: 750;
+  }
+  .sec-sub { color: var(--muted); max-width: 640px; margin: 0; }
+  .sec-head { margin-bottom: 44px; }
+
+  /* ── Feature grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .card {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: #33383f;
+    box-shadow: 0 16px 40px rgba(0,0,0,.35);
+  }
+  .card .ic {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(217,119,87,.25);
+    color: var(--accent);
+    margin-bottom: 18px;
+    font-size: 19px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 17px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+  .card code {
+    font-size: .86em;
+    background: #0a0b0d;
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 1px 6px;
+    color: var(--text);
+  }
+
+  /* ── How it works ── */
+  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .step {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 30px 26px 26px;
+    overflow: hidden;
+  }
+  .step .num {
+    position: absolute;
+    top: 18px; right: 22px;
+    font-family: var(--mono);
+    font-size: 46px;
+    font-weight: 800;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--border);
+    line-height: 1;
+  }
+  .step h3 { margin: 0 0 10px; font-size: 18px; }
+  .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .step .t { margin-top: 16px; }
+  .step .t div { font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
+  .step .t .a { color: var(--accent); }
+
+  /* ── Security ── */
+  .sec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .sec-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 26px;
+  }
+  .sec-card h3 { margin: 0 0 8px; font-size: 16.5px; display: flex; align-items: center; gap: 10px; }
+  .sec-card h3 .mark {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ok);
+    border: 1px solid rgba(74,222,128,.35);
+    background: rgba(74,222,128,.08);
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .sec-card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  /* ── Numbers strip ── */
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .number {
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 30px 16px;
+  }
+  .number .v {
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .number .l { margin-top: 10px; font-size: 13.5px; color: var(--muted); line-height: 1.45; }
+  .number .l code { font-size: .85em; color: var(--text); }
+
+  /* ── Install ── */
+  .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
+  .inst {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: 26px;
+  }
+  .inst .k {
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #0c0d0f;
+    font-family: var(--mono);
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .inst h3 { margin: 0 0 8px; font-size: 16.5px; }
+  .inst p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .inst pre {
+    margin: 0;
+    background: #0a0b0d;
+    border: 1px solid var(--border-soft);
+    border-radius: 9px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    line-height: 1.75;
+    overflow-x: auto;
+    color: var(--text);
+  }
+  .inst pre .c { color: var(--dim); }
+  .inst pre .p { color: var(--accent); }
+  .kbd {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: #0a0b0d;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 1px 7px;
+    color: var(--text);
+  }
+
+  /* ── Footer ── */
+  footer {
+    margin-top: 110px;
+    border-top: 1px solid var(--border-soft);
+    padding: 36px 0 44px;
+    color: var(--dim);
+    font-size: 13.5px;
+  }
+  .foot-inner {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .foot-inner .mono { color: var(--muted); }
+
+  /* ── Reveal animation ── */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+
+  @media (max-width: 880px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .steps, .sec-grid, .numbers, .install { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid, .steps, .sec-grid, .numbers, .install { grid-template-columns: 1fr; }
+    section { padding-top: 64px; }
+    .hero { padding-top: 80px; }
+    .nav-links a:not(.gh) { display: none; }
+    .wrap { padding: 0 20px; }
+    .nav-inner { padding: 12px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">
+      <img src="assets/bat-icon.svg" alt="BAT icon" width="26" height="26">
+      BAT
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#security">Security</a>
+      <a href="#install">Install</a>
+      <a class="gh" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">Source <span class="arr">↗</span></a>
+    </nav>
+  </div>
+</header>
+
+<main id="top" class="wrap">
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <p class="eyebrow"><span class="dot"></span> Chrome extension &middot; Manifest V3 &middot; DeepSeek agent</p>
+    <h1>BAT</h1>
+    <p class="tagline">
+      A <b>Browser Automation Tool</b> that lives in your side panel. It reads any page through
+      an accessibility tree, reasons over it, and drives the browser with native tool calls —
+      <code>click</code>, <code>type</code>, <code>navigate</code>, <code>extract</code>, <code>collect</code>.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Install BAT</a>
+      <a class="btn btn-ghost" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">Read the source</a>
+    </div>
+
+    <div class="terminal reveal">
+      <div class="terminal-head"><i></i><i></i><i></i><span>bat — setup</span></div>
+      <div class="terminal-body">
+        <div><span class="p">$</span> <span class="w">npm install</span> <span class="c"># then build the extension</span></div>
+        <div><span class="p">$</span> <span class="w">npm run build</span> <span class="c"># → dist/</span></div>
+        <div>&nbsp;</div>
+        <div><span class="c"># chrome://extensions → Developer mode → Load unpacked → dist/</span></div>
+        <div>&nbsp;</div>
+        <div><span class="p">⚙</span> <span class="w">DeepSeek API key</span> <span class="ok">sk-…</span></div>
+        <div><span class="p">⇧</span> <span class="w">Open side panel</span> <span class="ok">Ctrl + Shift + E</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Features ── -->
+  <section id="features">
+    <div class="sec-head reveal">
+      <p class="sec-label">What it does</p>
+      <h2>An agent that reads pages, not pixels.</h2>
+      <p class="sec-sub">
+        BAT serializes a page into a clean, structured report the model can act on reliably,
+        then executes every action with real browser tools.
+      </p>
+    </div>
+    <div class="grid">
+      <div class="card reveal">
+        <div class="ic">🌳</div>
+        <h3>Reads pages for the model</h3>
+        <p>An accessibility tree + page text + checkbox state + JSON-LD product data, emitted as a
+          fenced <code>PAGE REPORT</code> — so the model always acts on structure, never guesses.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">🖱️</div>
+        <h3>Native browser tools</h3>
+        <p><code>left_click</code>, <code>type</code>, <code>form_input</code>, <code>navigate</code>,
+          <code>scroll</code>, <code>run_javascript</code>, <code>get_links</code>, <code>find</code> —
+          executed via CDP and the scripting API, with a phantom cursor so you see every click.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">📁</div>
+        <h3>Collects data to files</h3>
+        <p>A dedup store feeds TSV/CSV in a workspace folder (on disk or embedded), and
+          <code>give_file</code> hands the finished file straight into the chat with a Download button.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">⚙️</div>
+        <h3>Background collection runs</h3>
+        <p>A service-worker runner walks a plan page-by-page with cached extractors, checkpoints
+          after every page, and survives panel close and browser restart.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">✅</div>
+        <h3>Keeps itself on track</h3>
+        <p>A working checklist the model maintains (<code>set_checklist</code>) plus a per-run event
+          log — both injected into its context every single turn.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">🧲</div>
+        <h3>Whole job boards via ATS</h3>
+        <p>Greenhouse, Lever, Ashby and Workable public JSON APIs — an entire company board in one
+          HTTP call, no tab and no extractor needed, merged into the same dedup pipeline.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How it works ── -->
+  <section id="how">
+    <div class="sec-head reveal">
+      <p class="sec-label">How it works</p>
+      <h2>Observe → decide → act → collect.</h2>
+      <p class="sec-sub">One loop, running against the real page in your browser.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="num">01</div>
+        <h3>Observe</h3>
+        <p>Injects a serializer into every frame and builds the PAGE REPORT — accessibility tree with
+          <code>[ref_N]</code> handles, visible text, checkboxes, product data. Sensitive values are
+          redacted before anything leaves the page.</p>
+        <div class="t">
+          <div class="a">read_page</div>
+          <div class="c">tree</div>
+          <div class="c">text</div>
+          <div class="c">refs</div>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="num">02</div>
+        <h3>Decide</h3>
+        <p>One DeepSeek call per step. The model picks a tool call against a live ref — click, type,
+          set a checkbox, navigate — with its checklist and run log injected so it never works from memory.</p>
+        <div class="t">
+          <div class="a">deepseek-v4-flash</div>
+          <div class="c">native tool calling</div>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="num">03</div>
+        <h3>Act</h3>
+        <p>Tools run via CDP + the scripting API with page-idle waits, a phantom cursor, and stuck
+          detection that escalates (search-first navigation, refresh, re-read) instead of looping.</p>
+        <div class="t">
+          <div class="a">left_click</div>
+          <div class="a">form_input</div>
+          <div class="a">navigate</div>
+        </div>
+      </div>
+      <div class="step reveal">
+        <div class="num">04</div>
+        <h3>Collect</h3>
+        <p>Rows pass through a dedup store — first row wins, duplicate sources merge — then novel
+          rows append to TSV/CSV in your workspace. <code>give_file</code> puts the finished file in the chat.</p>
+        <div class="t">
+          <div class="a">collect_rows</div>
+          <div class="a">export_rows</div>
+          <div class="a">give_file</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Security ── -->
+  <section id="security">
+    <div class="sec-head reveal">
+      <p class="sec-label">Security model</p>
+      <h2>Model-authored code, treated as untrusted.</h2>
+      <p class="sec-sub">Every path where model output becomes a running action is gated.</p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card reveal">
+        <h3>Two-layer extractor screen <span class="mark">sandbox</span></h3>
+        <p>Model-written extractors and <code>run_javascript</code> pass a regex denylist <em>and</em>
+          an AST alias-tracking pass (acorn) before running in the page realm — closing
+          <code>window.fetch</code> aliasing, DOM-injection exfiltration and prototype-chain escapes.</p>
+      </div>
+      <div class="sec-card reveal">
+        <h3>Sensitive-value redaction <span class="mark">privacy</span></h3>
+        <p>Password, OTP, card and pin fields are caught by type, autocomplete token, name and id —
+          and redacted before upload. <code>type=file</code> local paths never surface.</p>
+      </div>
+      <div class="sec-card reveal">
+        <h3>Site allowlist <span class="mark">control</span></h3>
+        <p>Page-changing tools are gated by an approved-sites list that fails closed when empty.
+          Allow-all is an explicit opt-in for fresh installs; a redirect off-list stops the run.</p>
+      </div>
+      <div class="sec-card reveal">
+        <h3>Guarded regexes <span class="mark">hardening</span></h3>
+        <p>Every model-authored pattern is analyzed with safe-regex before compile, so a single
+          catastrophic-backtracking pattern can never hang the extension.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Numbers ── -->
+  <section id="specs">
+    <div class="sec-head reveal">
+      <p class="sec-label">Specs</p>
+      <h2>Small, tested, offline-first.</h2>
+    </div>
+    <div class="numbers">
+      <div class="number reveal">
+        <div class="v">677</div>
+        <div class="l">offline unit tests<br>gating every build</div>
+      </div>
+      <div class="number reveal">
+        <div class="v">0</div>
+        <div class="l">model calls per page<br>after extractors are cached</div>
+      </div>
+      <div class="number reveal">
+        <div class="v">1</div>
+        <div class="l">model, one constant<br><code>deepseek-v4-flash</code></div>
+      </div>
+      <div class="number reveal">
+        <div class="v">1</div>
+        <div class="l">workspace, one location<br>disk folder or embedded</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Install ── -->
+  <section id="install">
+    <div class="sec-head reveal">
+      <p class="sec-label">Install</p>
+      <h2>Running in about a minute.</h2>
+      <p class="sec-sub">No account, no server. Just a Chrome extension and your own DeepSeek key.</p>
+    </div>
+    <div class="install">
+      <div class="inst reveal">
+        <div class="k">1</div>
+        <h3>Build it</h3>
+        <p>Clone the repo, install, and produce the <code>dist/</code> bundle.</p>
+        <pre><span class="p">$</span> git clone https://github.com/SATHv1kk/BAT.git
+<span class="p">$</span> cd BAT
+<span class="p">$</span> npm install
+<span class="p">$</span> npm run build</pre>
+      </div>
+      <div class="inst reveal">
+        <div class="k">2</div>
+        <h3>Load it</h3>
+        <p>Load the unpacked extension from the built folder.</p>
+        <pre><span class="c"># chrome://extensions</span>
+Developer mode <span class="c">→</span> Load unpacked
+<span class="c">→</span> select <span class="p">dist/</span></pre>
+      </div>
+      <div class="inst reveal">
+        <div class="k">3</div>
+        <h3>Connect it</h3>
+        <p>Open the side panel and add your DeepSeek key. Optionally pin a workspace folder for files on disk.</p>
+        <pre><span class="p">Ctrl + Shift + E</span> <span class="c">open panel</span>
+<span class="p">⚙</span> Settings <span class="c">→</span> API key  <span class="ok">sk-…</span>
+<span class="p">⚙</span> Settings <span class="c">→</span> workspace folder</pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="foot-inner">
+    <div>BAT — Browser Automation Tool · <span class="mono">MIT License</span></div>
+    <div class="mono"><a href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">github.com/SATHv1kk/BAT</a></div>
+  </div>
+</footer>
+
+<script>
+  const els = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }
+  }, { threshold: 0.12 });
+  els.forEach((el) => io.observe(el));
+</script>
+</body>
+</html>
