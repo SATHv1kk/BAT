@@ -4,7 +4,7 @@ Static GitHub Pages home for the **BAT** Chrome extension (Manifest V3): a brows
 automation agent that runs in the side panel, reads any page through an accessibility
 tree, reasons over it with DeepSeek, and drives the browser with ~30 native tool calls.
 
-**Live site:** https://sathv1kk.github.io/BAT/
+
 
 ## The project
 
