@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BAT — Browser Automation Tool</title>
-<meta name="description" content="BAT is a Chrome extension that runs a browser automation agent in a side panel. It reads any page through an accessibility tree, reasons with DeepSeek, and drives the browser with native tool calls.">
+<meta name="description" content="BAT is a Chrome extension (Manifest V3) that runs a browser automation agent in a side panel. It reads any page through an accessibility tree, reasons with DeepSeek, and drives the browser with ~30 native tool calls — click, type, navigate, extract, collect.">
 <link rel="icon" type="image/svg+xml" href="assets/bat-icon.svg">
 <style>
   :root {
@@ -19,6 +19,7 @@
     --accent: #d97757;
     --accent-soft: rgba(217, 119, 87, .12);
     --ok: #4ade80;
+    --warn: #fbbf24;
     --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --maxw: 1080px;
@@ -53,53 +54,26 @@
   a:hover { text-decoration: underline; }
   code, pre, .mono { font-family: var(--mono); }
 
-  /* ── Layout scaffolding ── */
-  .wrap {
-    position: relative;
-    z-index: 1;
-    max-width: var(--maxw);
-    margin: 0 auto;
-    padding: 0 28px;
-  }
+  .wrap { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
   section { padding: 88px 0 24px; }
 
   /* ── Nav ── */
   .nav {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: rgba(12,13,15,.78);
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(12,13,15,.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-soft);
   }
   .nav-inner {
-    max-width: var(--maxw);
-    margin: 0 auto;
-    padding: 14px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
+    max-width: var(--maxw); margin: 0 auto; padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--text);
-    font-weight: 700;
-    letter-spacing: .14em;
-    text-decoration: none;
-  }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; letter-spacing: .14em; text-decoration: none; }
   .brand img { width: 26px; height: 26px; display: block; }
   .brand:hover { text-decoration: none; }
-  .nav-links { display: flex; align-items: center; gap: 22px; }
-  .nav-links a {
-    color: var(--muted);
-    font-size: 13.5px;
-    font-weight: 500;
-    letter-spacing: .01em;
-  }
+  .nav-links { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .nav-links a { color: var(--muted); font-size: 13.5px; font-weight: 500; }
   .nav-links a:hover { color: var(--text); text-decoration: none; }
   .nav-links .gh { color: var(--text); }
   .nav-links .gh .arr { color: var(--accent); }
@@ -107,98 +81,39 @@
   /* ── Hero ── */
   .hero { padding-top: 110px; text-align: center; }
   .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    background: var(--panel);
-    padding: 7px 14px;
-    border-radius: 999px;
-    margin-bottom: 28px;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--border); background: var(--panel);
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 28px;
   }
-  .eyebrow .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 10px var(--ok);
-  }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px var(--ok); }
   h1 {
-    margin: 0;
-    font-size: clamp(64px, 13vw, 150px);
-    line-height: .95;
-    letter-spacing: -.04em;
-    font-weight: 800;
+    margin: 0; font-size: clamp(64px, 13vw, 150px); line-height: .95; letter-spacing: -.04em; font-weight: 800;
     background: linear-gradient(180deg, #fff, #b9bec6);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .tagline {
-    max-width: 620px;
-    margin: 26px auto 0;
-    font-size: clamp(17px, 2.2vw, 20px);
-    color: var(--muted);
-    line-height: 1.65;
-  }
+  .tagline { max-width: 660px; margin: 26px auto 0; font-size: clamp(17px, 2.2vw, 20px); color: var(--muted); line-height: 1.65; }
   .tagline b { color: var(--text); font-weight: 600; }
-  .tagline code {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1px 7px;
-    font-size: .88em;
-    color: var(--accent);
-  }
+  .tagline code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; font-size: .88em; color: var(--accent); }
 
-  .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    display: inline-block;
-    padding: 13px 26px;
-    border-radius: 10px;
-    font-size: 15px;
-    font-weight: 600;
-    border: 1px solid transparent;
-    transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+  .chips { margin-top: 26px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 6px 14px;
   }
+  .chip b { color: var(--text); font-weight: 600; }
+
+  .cta { margin-top: 38px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 13px 26px; border-radius: 10px; font-size: 15px; font-weight: 600; border: 1px solid transparent; transition: transform .12s ease, background .12s ease, box-shadow .12s ease; }
   .btn:hover { text-decoration: none; transform: translateY(-1px); }
-  .btn-primary {
-    background: var(--accent);
-    color: #0c0d0f;
-  }
+  .btn-primary { background: var(--accent); color: #0c0d0f; }
   .btn-primary:hover { box-shadow: 0 8px 30px rgba(217,119,87,.35); }
-  .btn-ghost {
-    background: var(--panel);
-    color: var(--text);
-    border-color: var(--border);
-  }
+  .btn-ghost { background: var(--panel); color: var(--text); border-color: var(--border); }
   .btn-ghost:hover { background: var(--panel-2); }
 
-  /* ── Terminal card ── */
-  .terminal {
-    max-width: 640px;
-    margin: 54px auto 0;
-    text-align: left;
-    background: #0a0b0d;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    box-shadow: 0 24px 80px rgba(0,0,0,.5);
-  }
-  .terminal-head {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 11px 14px;
-    border-bottom: 1px solid var(--border-soft);
-    background: var(--panel);
-  }
-  .terminal-head i {
-    width: 11px; height: 11px; border-radius: 50%; display: inline-block;
-  }
+  .terminal { max-width: 640px; margin: 54px auto 0; text-align: left; background: #0a0b0d; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+  .terminal-head { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border-soft); background: var(--panel); }
+  .terminal-head i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
   .terminal-head i:nth-child(1) { background: #ff5f57; }
   .terminal-head i:nth-child(2) { background: #febc2e; }
   .terminal-head i:nth-child(3) { background: #28c840; }
@@ -210,202 +125,118 @@
   .terminal-body .w { color: var(--text); }
 
   /* ── Section headers ── */
-  .sec-label {
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: .2em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 10px;
-  }
-  h2 {
-    margin: 0 0 14px;
-    font-size: clamp(28px, 4vw, 40px);
-    letter-spacing: -.02em;
-    line-height: 1.15;
-    font-weight: 750;
-  }
-  .sec-sub { color: var(--muted); max-width: 640px; margin: 0; }
+  .sec-label { font-family: var(--mono); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  h2 { margin: 0 0 14px; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.02em; line-height: 1.15; font-weight: 750; }
+  .sec-sub { color: var(--muted); max-width: 680px; margin: 0; }
   .sec-head { margin-bottom: 44px; }
 
   /* ── Feature grid ── */
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-  }
-  .card {
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 26px 24px;
-    transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
-  }
-  .card:hover {
-    transform: translateY(-3px);
-    border-color: #33383f;
-    box-shadow: 0 16px 40px rgba(0,0,0,.35);
-  }
-  .card .ic {
-    width: 40px; height: 40px;
-    display: grid; place-items: center;
-    border-radius: 10px;
-    background: var(--accent-soft);
-    border: 1px solid rgba(217,119,87,.25);
-    color: var(--accent);
-    margin-bottom: 18px;
-    font-size: 19px;
-  }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 24px; transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .card:hover { transform: translateY(-3px); border-color: #33383f; box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+  .card .ic { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: var(--accent-soft); border: 1px solid rgba(217,119,87,.25); color: var(--accent); margin-bottom: 18px; font-size: 19px; }
   .card h3 { margin: 0 0 8px; font-size: 17px; letter-spacing: -.01em; }
   .card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
-  .card code {
-    font-size: .86em;
-    background: #0a0b0d;
-    border: 1px solid var(--border-soft);
-    border-radius: 5px;
-    padding: 1px 6px;
-    color: var(--text);
-  }
+  .card code { font-size: .86em; background: #0a0b0d; border: 1px solid var(--border-soft); border-radius: 5px; padding: 1px 6px; color: var(--text); }
 
-  /* ── How it works ── */
-  .steps { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .step {
-    position: relative;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--panel);
-    padding: 30px 26px 26px;
-    overflow: hidden;
+  /* ── Two-col content split ── */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
+  .box { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 26px; }
+  .box h3 { margin: 0 0 12px; font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  .box ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14.5px; }
+  .box li { margin-bottom: 8px; }
+  .box li b { color: var(--text); font-weight: 600; }
+  .box li code { font-size: .86em; background: #0a0b0d; border: 1px solid var(--border-soft); border-radius: 5px; padding: 1px 6px; color: var(--text); }
+
+  /* ── Tool table ── */
+  .tools { display: grid; gap: 18px; }
+  .toolgroup h3 {
+    margin: 0 0 10px; font-family: var(--mono); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
   }
-  .step .num {
-    position: absolute;
-    top: 18px; right: 22px;
-    font-family: var(--mono);
-    font-size: 46px;
-    font-weight: 800;
-    color: transparent;
-    -webkit-text-stroke: 1px var(--border);
-    line-height: 1;
+  .tooltable { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; font-size: 14px; }
+  .tooltable td { padding: 11px 16px; border-top: 1px solid var(--border-soft); vertical-align: top; }
+  .tooltable tr:first-child td { border-top: none; }
+  .tooltable td:first-child { width: 200px; }
+  .tooltable code { font-size: 12.5px; color: var(--accent); }
+  .tooltable td:last-child { color: var(--muted); }
+  .tooltable td:last-child em { color: var(--dim); font-style: normal; font-size: 13px; display: block; margin-top: 2px; }
+
+  /* ── Pipeline / steps ── */
+  .pipe { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .pipe .p { position: relative; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 20px 18px; }
+  .pipe .p::after {
+    content: "→"; position: absolute; right: -12px; top: 50%; transform: translateY(-50%);
+    color: var(--dim); font-size: 18px; z-index: 2;
   }
-  .step h3 { margin: 0 0 10px; font-size: 18px; }
-  .step p { margin: 0; color: var(--muted); font-size: 14.5px; }
-  .step .t { margin-top: 16px; }
-  .step .t div { font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
-  .step .t .a { color: var(--accent); }
+  .pipe .p:last-child::after { content: ""; }
+  .pipe .p .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .pipe .p h3 { margin: 8px 0 6px; font-size: 16px; }
+  .pipe .p p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+
+  /* ── Arch tree ── */
+  .arch { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .tree { background: #0a0b0d; border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; font-family: var(--mono); font-size: 13px; line-height: 1.85; overflow-x: auto; color: var(--text); }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .cm { color: var(--dim); }
+  .tree .f { color: var(--text); }
+  .tree .hl { color: var(--ok); }
+
+  /* ── States / statemachine ── */
+  .states { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 22px; }
+  .state { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 6px 14px; color: var(--text); }
+  .state.active { border-color: rgba(74,222,128,.4); color: var(--ok); }
+  .state.wait { border-color: rgba(251,191,36,.4); color: var(--warn); }
+  .state.err { border-color: rgba(248,113,113,.4); color: #f87171; }
+  .arrow { color: var(--dim); font-family: var(--mono); }
 
   /* ── Security ── */
   .sec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .sec-card {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--panel);
-    padding: 26px;
-  }
-  .sec-card h3 { margin: 0 0 8px; font-size: 16.5px; display: flex; align-items: center; gap: 10px; }
-  .sec-card h3 .mark {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ok);
-    border: 1px solid rgba(74,222,128,.35);
-    background: rgba(74,222,128,.08);
-    padding: 2px 8px;
-    border-radius: 999px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-  }
-  .sec-card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .sec-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 26px; }
+  .sec-card h3 { margin: 0 0 8px; font-size: 16.5px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .sec-card h3 .mark { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ok); border: 1px solid rgba(74,222,128,.35); background: rgba(74,222,128,.08); padding: 2px 8px; border-radius: 999px; letter-spacing: .08em; text-transform: uppercase; }
+  .sec-card p { margin: 0 0 10px; color: var(--muted); font-size: 14.5px; }
+  .sec-card .more { margin: 0; padding-left: 20px; color: var(--dim); font-size: 13.5px; }
+  .sec-card .more li { margin-bottom: 5px; }
+  .sec-card .more code { font-size: .86em; color: var(--text); background: #0a0b0d; border: 1px solid var(--border-soft); border-radius: 4px; padding: 0 5px; }
 
-  /* ── Numbers strip ── */
-  .numbers {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-top: 16px;
-  }
-  .number {
-    text-align: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--panel);
-    padding: 30px 16px;
-  }
-  .number .v {
-    font-size: 38px;
-    font-weight: 800;
-    letter-spacing: -.02em;
-    color: var(--accent);
-    line-height: 1;
-  }
+  /* ── Numbers ── */
+  .numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px; }
+  .number { text-align: center; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 30px 16px; }
+  .number .v { font-size: 38px; font-weight: 800; letter-spacing: -.02em; color: var(--accent); line-height: 1; }
   .number .l { margin-top: 10px; font-size: 13.5px; color: var(--muted); line-height: 1.45; }
   .number .l code { font-size: .85em; color: var(--text); }
 
+  /* ── Scripts / dev ── */
+  .dev { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .devpre { background: #0a0b0d; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; font-family: var(--mono); font-size: 13px; line-height: 2; overflow-x: auto; margin: 0; }
+  .devpre .c { color: var(--dim); }
+  .devpre .p { color: var(--accent); }
+  .devpre .ok { color: var(--ok); }
+
+  /* ── Changelog highlights ── */
+  .changelog { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .logitem { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 16px 18px; }
+  .logitem .n { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .logitem h4 { margin: 4px 0 6px; font-size: 14.5px; }
+  .logitem p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
   /* ── Install ── */
-  .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: step; }
-  .inst {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--panel);
-    padding: 26px;
-  }
-  .inst .k {
-    width: 34px; height: 34px;
-    display: grid; place-items: center;
-    border-radius: 9px;
-    background: var(--accent);
-    color: #0c0d0f;
-    font-family: var(--mono);
-    font-weight: 700;
-    margin-bottom: 16px;
-  }
+  .install { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .inst { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 26px; }
+  .inst .k { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: var(--accent); color: #0c0d0f; font-family: var(--mono); font-weight: 700; margin-bottom: 16px; }
   .inst h3 { margin: 0 0 8px; font-size: 16.5px; }
   .inst p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
-  .inst pre {
-    margin: 0;
-    background: #0a0b0d;
-    border: 1px solid var(--border-soft);
-    border-radius: 9px;
-    padding: 12px 14px;
-    font-size: 12.5px;
-    line-height: 1.75;
-    overflow-x: auto;
-    color: var(--text);
-  }
+  .inst pre { margin: 0; background: #0a0b0d; border: 1px solid var(--border-soft); border-radius: 9px; padding: 12px 14px; font-size: 12.5px; line-height: 1.75; overflow-x: auto; color: var(--text); }
   .inst pre .c { color: var(--dim); }
   .inst pre .p { color: var(--accent); }
-  .kbd {
-    display: inline-block;
-    font-family: var(--mono);
-    font-size: 12px;
-    background: #0a0b0d;
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
-    border-radius: 6px;
-    padding: 1px 7px;
-    color: var(--text);
-  }
+  .inst pre .ok { color: var(--ok); }
+  .kbd { display: inline-block; font-family: var(--mono); font-size: 12px; background: #0a0b0d; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; color: var(--text); }
 
   /* ── Footer ── */
-  footer {
-    margin-top: 110px;
-    border-top: 1px solid var(--border-soft);
-    padding: 36px 0 44px;
-    color: var(--dim);
-    font-size: 13.5px;
-  }
-  .foot-inner {
-    max-width: var(--maxw);
-    margin: 0 auto;
-    padding: 0 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
+  footer { margin-top: 110px; border-top: 1px solid var(--border-soft); padding: 36px 0 44px; color: var(--dim); font-size: 13.5px; }
+  .foot-inner { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .foot-inner .mono { color: var(--muted); }
 
-  /* ── Reveal animation ── */
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
   .reveal.in { opacity: 1; transform: none; }
 
@@ -415,16 +246,23 @@
   }
 
   @media (max-width: 880px) {
-    .grid { grid-template-columns: 1fr 1fr; }
-    .steps, .sec-grid, .numbers, .install { grid-template-columns: 1fr 1fr; }
+    .grid, .split, .arch, .sec-grid, .dev, .changelog { grid-template-columns: 1fr; }
+    .pipe { grid-template-columns: 1fr 1fr; }
+    .pipe .p::after { content: ""; }
+    .numbers, .install { grid-template-columns: 1fr 1fr; }
+    .tooltable td:first-child { width: 150px; }
   }
   @media (max-width: 600px) {
-    .grid, .steps, .sec-grid, .numbers, .install { grid-template-columns: 1fr; }
+    .grid, .pipe, .numbers, .install { grid-template-columns: 1fr; }
     section { padding-top: 64px; }
     .hero { padding-top: 80px; }
     .nav-links a:not(.gh) { display: none; }
     .wrap { padding: 0 20px; }
     .nav-inner { padding: 12px 20px; }
+    .tooltable td { display: block; width: 100% !important; }
+    .tooltable tr { display: block; padding: 8px 0; border-top: 1px solid var(--border-soft); }
+    .tooltable tr:first-child { border-top: none; }
+    .tooltable td:last-child { padding-top: 2px; }
   }
 </style>
 </head>
@@ -438,10 +276,14 @@
     </a>
     <nav class="nav-links">
       <a href="#features">Features</a>
-      <a href="#how">How it works</a>
+      <a href="#tools">Tools</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#agent">Agent</a>
+      <a href="#data">Data</a>
+      <a href="#runner">Runner</a>
       <a href="#security">Security</a>
-      <a href="#install">Install</a>
-      <a class="gh" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">Source <span class="arr">↗</span></a>
+      <a href="#develop">Develop</a>
+      <a class="gh" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">Repo <span class="arr">↗</span></a>
     </nav>
   </div>
 </header>
@@ -454,12 +296,19 @@
     <h1>BAT</h1>
     <p class="tagline">
       A <b>Browser Automation Tool</b> that lives in your side panel. It reads any page through
-      an accessibility tree, reasons over it, and drives the browser with native tool calls —
-      <code>click</code>, <code>type</code>, <code>navigate</code>, <code>extract</code>, <code>collect</code>.
+      an accessibility tree, reasons over a structured <b>PAGE REPORT</b>, and drives the browser
+      with <b>~30 native tool calls</b> — <code>left_click</code>, <code>type</code>,
+      <code>form_input</code>, <code>navigate</code>, <code>extract_rows</code>, <code>collect_rows</code>.
     </p>
+    <div class="chips">
+      <span class="chip">Manifest <b>V3</b></span>
+      <span class="chip"><b>677</b> offline tests</span>
+      <span class="chip">model: <b>deepseek-v4-flash</b></span>
+      <span class="chip">MIT</span>
+    </div>
     <div class="cta">
       <a class="btn btn-primary" href="#install">Install BAT</a>
-      <a class="btn btn-ghost" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">Read the source</a>
+      <a class="btn btn-ghost" href="https://github.com/SATHv1kk/BAT" target="_blank" rel="noopener">View the repo</a>
     </div>
 
     <div class="terminal reveal">
@@ -467,6 +316,7 @@
       <div class="terminal-body">
         <div><span class="p">$</span> <span class="w">npm install</span> <span class="c"># then build the extension</span></div>
         <div><span class="p">$</span> <span class="w">npm run build</span> <span class="c"># → dist/</span></div>
+        <div><span class="p">$</span> <span class="w">npm test</span> <span class="ok"># 677 offline unit tests</span></div>
         <div>&nbsp;</div>
         <div><span class="c"># chrome://extensions → Developer mode → Load unpacked → dist/</span></div>
         <div>&nbsp;</div>
@@ -483,103 +333,337 @@
       <h2>An agent that reads pages, not pixels.</h2>
       <p class="sec-sub">
         BAT serializes a page into a clean, structured report the model can act on reliably,
-        then executes every action with real browser tools.
+        then executes every action with real browser tools — no screenshots, no guessing.
       </p>
     </div>
     <div class="grid">
       <div class="card reveal">
         <div class="ic">🌳</div>
         <h3>Reads pages for the model</h3>
-        <p>An accessibility tree + page text + checkbox state + JSON-LD product data, emitted as a
-          fenced <code>PAGE REPORT</code> — so the model always acts on structure, never guesses.</p>
+        <p>A serializer injected into <b>every frame at document_start</b> builds the PAGE REPORT:
+          an indented accessibility tree with <code>[ref_N]</code> handles, page text, checkbox state
+          and JSON-LD product data — fenced so the model can parse it reliably.</p>
       </div>
       <div class="card reveal">
         <div class="ic">🖱️</div>
         <h3>Native browser tools</h3>
-        <p><code>left_click</code>, <code>type</code>, <code>form_input</code>, <code>navigate</code>,
-          <code>scroll</code>, <code>run_javascript</code>, <code>get_links</code>, <code>find</code> —
-          executed via CDP and the scripting API, with a phantom cursor so you see every click.</p>
+        <p>Click, type, set checkboxes, navigate, scroll, run JS — executed via <b>CDP + the scripting
+          API</b> with page-idle waits and a phantom cursor that shows you exactly what the agent is
+          doing on the page.</p>
       </div>
       <div class="card reveal">
         <div class="ic">📁</div>
         <h3>Collects data to files</h3>
-        <p>A dedup store feeds TSV/CSV in a workspace folder (on disk or embedded), and
-          <code>give_file</code> hands the finished file straight into the chat with a Download button.</p>
+        <p>A <b>dedup store</b> feeds TSV/CSV in a workspace folder (on disk or embedded storage),
+          and <code>give_file</code> hands the finished file straight into the chat with a Download button.</p>
       </div>
       <div class="card reveal">
         <div class="ic">⚙️</div>
         <h3>Background collection runs</h3>
-        <p>A service-worker runner walks a plan page-by-page with cached extractors, checkpoints
-          after every page, and survives panel close and browser restart.</p>
+        <p>A service-worker <b>plan runner</b> walks a plan page-by-page with cached extractors
+          (<b>zero model calls per page</b>), checkpoints after every page, and survives panel close
+          and browser restart.</p>
       </div>
       <div class="card reveal">
         <div class="ic">✅</div>
         <h3>Keeps itself on track</h3>
         <p>A working checklist the model maintains (<code>set_checklist</code>) plus a per-run event
-          log — both injected into its context every single turn.</p>
+          log — both injected into its context <b>every turn</b>, so it never works from memory.</p>
       </div>
       <div class="card reveal">
         <div class="ic">🧲</div>
         <h3>Whole job boards via ATS</h3>
-        <p>Greenhouse, Lever, Ashby and Workable public JSON APIs — an entire company board in one
-          HTTP call, no tab and no extractor needed, merged into the same dedup pipeline.</p>
+        <p>Greenhouse, Lever, Ashby and Workable public JSON APIs — an entire company board in <b>one
+          HTTP call</b>, no tab and no extractor, merged into the same dedup pipeline as scraped rows.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">🎓</div>
+        <h3>Course &amp; quiz mode</h3>
+        <p>Detects SCORM / Storyline / Captivate / Articulate pages, dismisses "Resume" dialogs,
+          answers single- and multi-choice questions, clicks Check, and reads pass/fail feedback.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">🧠</div>
+        <h3>Persists your work</h3>
+        <p>Chat history mirrors to <code>chrome.storage.local</code> and collected rows live in
+          IndexedDB — both survive panel close and browser shutdown. One fixed workspace, no surprises.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic">🔒</div>
+        <h3>Model code is untrusted</h3>
+        <p>Extractor source and <code>run_javascript</code> pass a two-layer safety screen
+          (regex denylist + AST alias tracking); sensitive fields are redacted before upload; a site
+          allowlist gates page-changing tools.</p>
       </div>
     </div>
   </section>
 
-  <!-- ── How it works ── -->
-  <section id="how">
+  <!-- ── Tools ── -->
+  <section id="tools">
     <div class="sec-head reveal">
-      <p class="sec-label">How it works</p>
-      <h2>Observe → decide → act → collect.</h2>
-      <p class="sec-sub">One loop, running against the real page in your browser.</p>
+      <p class="sec-label">The toolset</p>
+      <h2>~30 native tools, offered to the model.</h2>
+      <p class="sec-sub">
+        The model sees these as real function calls. Every one runs in the browser — nothing is
+        simulated.
+      </p>
     </div>
-    <div class="steps">
-      <div class="step reveal">
-        <div class="num">01</div>
-        <h3>Observe</h3>
-        <p>Injects a serializer into every frame and builds the PAGE REPORT — accessibility tree with
-          <code>[ref_N]</code> handles, visible text, checkboxes, product data. Sensitive values are
-          redacted before anything leaves the page.</p>
-        <div class="t">
-          <div class="a">read_page</div>
-          <div class="c">tree</div>
-          <div class="c">text</div>
-          <div class="c">refs</div>
-        </div>
+    <div class="tools">
+      <div class="toolgroup reveal">
+        <h3>Observe &amp; read</h3>
+        <table class="tooltable">
+          <tr><td><code>read_page</code></td><td>Build the PAGE REPORT accessibility tree; zoom into one <code>[ref]</code>, filter to interactive elements, cap depth. <em>Live refs — never stale.</em></td></tr>
+          <tr><td><code>get_page_text</code></td><td>Visible text from all frames, enriched with aria-labels and checkbox state. Best for course content and feedback.</td></tr>
+          <tr><td><code>find</code></td><td>Search the page for text; returns matching elements minted with clickable refs.</td></tr>
+          <tr><td><code>get_links</code></td><td>Every visible link in one call — <code>&lt;a href&gt;</code> and JS product-viewer cards (<code>data-url</code>/<code>data-href</code>), with refs. Optional <code>href_contains</code> filter.</td></tr>
+          <tr><td><code>read_console</code></td><td>Console logs and exceptions from the working tab (CDP monitor), optional regex filter.</td></tr>
+          <tr><td><code>read_network</code></td><td>Network requests: method, status, URL, failures — for debugging blocked loads.</td></tr>
+        </table>
       </div>
-      <div class="step reveal">
-        <div class="num">02</div>
-        <h3>Decide</h3>
-        <p>One DeepSeek call per step. The model picks a tool call against a live ref — click, type,
-          set a checkbox, navigate — with its checklist and run log injected so it never works from memory.</p>
-        <div class="t">
-          <div class="a">deepseek-v4-flash</div>
-          <div class="c">native tool calling</div>
-        </div>
+      <div class="toolgroup reveal">
+        <h3>Act on the page</h3>
+        <table class="tooltable">
+          <tr><td><code>left_click</code></td><td>Click an element by ref (CDP when needed for stubborn dialogs); label fallback if a ref went stale.</td></tr>
+          <tr><td><code>type</code></td><td>Type text into an input by ref, replacing existing value; CDP <code>Input.insertText</code> on canvas layers.</td></tr>
+          <tr><td><code>form_input</code></td><td>Set a checkbox/radio/select/input by ref — more reliable than clicking on SCORM/LMS pages.</td></tr>
+          <tr><td><code>press_key</code></td><td>Enter, Tab, Escape, arrows, Space… via synthesized key events.</td></tr>
+          <tr><td><code>scroll</code></td><td>Scroll down/up, or <code>to:"bottom"</code> to load lazy-loaded lists until height stops growing.</td></tr>
+          <tr><td><code>scroll_to</code></td><td>Bring an element into view before clicking below the fold.</td></tr>
+          <tr><td><code>navigate</code></td><td>Go to a URL in the working tab; detects Chrome error interstitials (anti-bot) and says so instead of looping.</td></tr>
+          <tr><td><code>go_back</code> / <code>go_forward</code> / <code>refresh</code></td><td>History and reload, each with wait-for-idle.</td></tr>
+          <tr><td><code>run_javascript</code></td><td>Run an expression in the page (MAIN world, falls back to isolated). Safety-screened at the sink, not just the caller.</td></tr>
+          <tr><td><code>wait</code></td><td>Pause ~1.5s for the page to settle, then re-observe.</td></tr>
+        </table>
       </div>
-      <div class="step reveal">
-        <div class="num">03</div>
-        <h3>Act</h3>
-        <p>Tools run via CDP + the scripting API with page-idle waits, a phantom cursor, and stuck
-          detection that escalates (search-first navigation, refresh, re-read) instead of looping.</p>
-        <div class="t">
-          <div class="a">left_click</div>
-          <div class="a">form_input</div>
-          <div class="a">navigate</div>
-        </div>
+      <div class="toolgroup reveal">
+        <h3>Collect &amp; save</h3>
+        <table class="tooltable">
+          <tr><td><code>collect_rows</code></td><td>The data-collection tool: dedup store keyed on <code>dedup_fields</code>, first row wins, duplicate sources merge; only novel rows hit the file.</td></tr>
+          <tr><td><code>extract_rows</code></td><td>Bulk-extract structured rows from the current page via a <b>cached per-site extractor</b> — no page reading needed. Supports synthesis, replay, validation and halting.</td></tr>
+          <tr><td><code>run_control</code></td><td>Create, start, pause, resume, verify and report on <b>background plan runs</b>; lists site templates and their verification state.</td></tr>
+          <tr><td><code>ats_fetch</code></td><td>Fetch an entire company board from a public ATS JSON API — greenhouse, lever, ashby, workable.</td></tr>
+          <tr><td><code>append_rows</code></td><td>Append raw rows to a TSV/CSV without dedup; header written once, cells sanitized.</td></tr>
+          <tr><td><code>export_rows</code></td><td>Regenerate the file from the store — one row per unique key with all merged sources joined.</td></tr>
+          <tr><td><code>data_report</code></td><td>Authoritative totals from the store: unique rows, merged, per-source, NOT-FOUNDs.</td></tr>
+          <tr><td><code>record_not_found</code></td><td>Record a target that yielded nothing so the end-of-job report lists it honestly.</td></tr>
+          <tr><td><code>save_file</code> / <code>read_file</code> / <code>list_files</code></td><td>Workspace file access — notes, progress checkpoints, and anything that must survive a session.</td></tr>
+          <tr><td><code>give_file</code></td><td>Show a workspace file <b>in the chat</b> as a downloadable attachment.</td></tr>
+        </table>
       </div>
-      <div class="step reveal">
-        <div class="num">04</div>
-        <h3>Collect</h3>
-        <p>Rows pass through a dedup store — first row wins, duplicate sources merge — then novel
-          rows append to TSV/CSV in your workspace. <code>give_file</code> puts the finished file in the chat.</p>
-        <div class="t">
-          <div class="a">collect_rows</div>
-          <div class="a">export_rows</div>
-          <div class="a">give_file</div>
-        </div>
+      <div class="toolgroup reveal">
+        <h3>Tabs &amp; meta</h3>
+        <table class="tooltable">
+          <tr><td><code>list_tabs</code> / <code>switch_tab</code> / <code>open_tab</code></td><td>Tab management. The agent is pinned to its working tab; you can browse others while it works.</td></tr>
+          <tr><td><code>set_checklist</code></td><td>Create or update the working checklist, injected into the model's context every turn.</td></tr>
+          <tr><td><code>done</code></td><td>Declare the goal achieved (e.g. course completed).</td></tr>
+          <tr><td><code>screenshot</code> / <code>click_coords</code></td><td>Vision tools — <b>withheld</b> because DeepSeek cannot read images; never offered, never guessed.</td></tr>
+        </table>
       </div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ── -->
+  <section id="architecture">
+    <div class="sec-head reveal">
+      <p class="sec-label">Architecture</p>
+      <h2>Four contexts, one loop.</h2>
+      <p class="sec-sub">
+        The extension is split across the four JavaScript contexts a Manifest V3 extension can
+        inhabit — each with a single responsibility.
+      </p>
+    </div>
+    <div class="arch">
+      <div class="tree reveal">
+<span class="dir">src/</span>
+├─ <span class="dir">content/</span>  <span class="cm">injected into every page</span>
+│  ├─ <span class="hl">accessibility-tree.js</span>   PAGE REPORT builder
+│  │   <span class="cm">(every frame · document_start · classic IIFE)</span>
+│  └─ <span class="hl">phantom-cursor.js</span>        visual overlay of agent clicks
+├─ <span class="dir">background/</span>  <span class="cm">service worker</span>
+│  ├─ <span class="hl">index.js</span>    DeepSeek proxy · side-panel wiring · ATS proxy
+│  └─ <span class="hl">runner.js</span>   background plan runner (state machine + watchdog)
+├─ <span class="dir">sidepanel/</span>  <span class="cm">the agent UI</span>
+│  ├─ <span class="hl">app.js</span>      agent loop · tool dispatch · chat UI
+│  ├─ <span class="hl">prompt.js</span>   system prompt
+│  ├─ <span class="hl">tool-defs.js</span> ~30 native tool schemas (pure data)
+│  └─ <span class="hl">deepseek.js</span> SSE → direct → worker transport + retry ladder
+├─ <span class="dir">lib/</span>        <span class="cm">shared logic, Node-testable</span>
+│  ├─ <span class="f">browser-tools</span> · <span class="f">page-tools</span>   CDP + scripting executors
+│  ├─ <span class="f">state-store</span>  · <span class="f">output-writer</span>  dedup store · TSV/CSV
+│  ├─ <span class="f">extractor-*</span> · <span class="f">plan</span> · <span class="f">allowlist</span> · <span class="f">redaction</span>
+│  ├─ <span class="f">ats-adapters</span> · <span class="f">site-verification</span> · <span class="f">regex-guard</span>
+│  └─ <span class="f">workspace</span>    · <span class="f">embedded-storage</span> · <span class="f">locator</span>
+├─ <span class="dir">shared/</span>      <span class="cm">constants · site configs</span>
+└─ <span class="dir">agent/</span>       <span class="cm">legacy JSON action parser</span>
+<span class="dir">test/</span>            <span class="cm">677 offline unit tests</span>
+      </div>
+      <div class="box reveal">
+        <h3>How the pieces talk</h3>
+        <ul>
+          <li><b>Content scripts</b> serialize the page and render the phantom cursor; they never talk to the model directly.</li>
+          <li><b>Side panel</b> owns the agent loop, the chat, and tool dispatch. It never touches the page realm for reading — it injects scripts instead.</li>
+          <li><b>Service worker</b> proxies DeepSeek (the panel's CSP blocks cross-origin fetch), runs ATS fetches, and hosts the background plan runner.</li>
+          <li><b>lib/</b> is where security, storage, extractors and planning live — deliberately pure and unit-tested in plain Node.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="pipe" style="margin-top:16px">
+      <div class="p reveal">
+        <div class="tag">Observe</div>
+        <h3>Inject + serialize</h3>
+        <p>accessibility-tree builds the PAGE REPORT with live <code>[ref]</code> handles.</p>
+      </div>
+      <div class="p reveal">
+        <div class="tag">Reason</div>
+        <h3>One model call</h3>
+        <p>DeepSeek picks a tool call against the current page state.</p>
+      </div>
+      <div class="p reveal">
+        <div class="tag">Act</div>
+        <h3>CDP / scripting</h3>
+        <p>Tools execute in the browser; the page reacts; cursor shows what ran.</p>
+      </div>
+      <div class="p reveal">
+        <div class="tag">Collect</div>
+        <h3>Store → file</h3>
+        <p>Rows dedup into IndexedDB, novel rows append to TSV/CSV on disk.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Agent ── -->
+  <section id="agent">
+    <div class="sec-head reveal">
+      <p class="sec-label">The agent loop</p>
+      <h2>Reliability built into every turn.</h2>
+    </div>
+    <div class="split">
+      <div class="box reveal">
+        <h3>The loop, per step</h3>
+        <ul>
+          <li><b>Snapshot</b> — the page is observed; a fingerprint decides whether a full PAGE REPORT or a short "unchanged" note is sent.</li>
+          <li><b>Context</b> — the system prompt, the <b>checklist</b>, and the <b>run event log</b> are rebuilt and injected every turn.</li>
+          <li><b>Call</b> — one DeepSeek call with native tool schemas; effort is routed by difficulty (low for routine steps, high for recovery).</li>
+          <li><b>Execute</b> — tool calls run against the pinned tab; reasoning <code>reasoning_content</code> is preserved verbatim for the next call.</li>
+          <li><b>Collect</b> — rows go through the dedup store; the model never holds data in memory.</li>
+        </ul>
+      </div>
+      <div class="box reveal">
+        <h3>Escalation ladder</h3>
+        <ul>
+          <li><b>Stuck page</b> — an unchanged tree is counted; after repeated no-effect turns the agent escalates (refresh, go_back, or <code>run_javascript</code> on the target).</li>
+          <li><b>Unreadable page</b> — Chrome error interstitials and blocked loads are named, not guessed; repeated failures trigger a "search-first" rule.</li>
+          <li><b>Search-first navigation</b> — if direct-URL loads fail 3×, the agent stops using URLs for that site and drives its search bar with plain words.</li>
+          <li><b>"Model said no"</b> — a refusal in the first steps, before any tool ran, is nudged to actually try (capped so it cannot loop).</li>
+          <li><b>Context budget</b> — 100k-char conversation budget: trim oldest messages, drop history only with a marker, keep tool-call/result pairs together.</li>
+        </ul>
+      </div>
+      <div class="box reveal" style="grid-column:1/-1">
+        <h3>Degradation ladder (API)</h3>
+        <p style="color:var(--muted);font-size:14.5px;margin:0 0 8px">
+          DeepSeek's contract: any tool-calling request must replay <code>reasoning_content</code> verbatim. BAT sends <code>tools</code> on every interactive request, so it never truncates a thinking block — and if the provider rejects a parameter, it walks an ordered ladder instead of spinning:
+        </p>
+        <div class="states" style="margin:12px 0 0">
+          <span class="state active">enabled + effort</span><span class="arrow">→</span>
+          <span class="state active">enabled</span><span class="arrow">→</span>
+          <span class="state active">disabled</span><span class="arrow">→</span>
+          <span class="state active">omit</span>
+        </div>
+        <p style="color:var(--dim);font-size:13.5px;margin:8px 0 0">
+          Transports cascade too: SSE stream → plain fetch → service-worker proxy, sharing one overall deadline so retries can never stack into a multi-minute stall. Retries use exponential backoff; 401/402/429 are reported in words the user can act on.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Data ── -->
+  <section id="data">
+    <div class="sec-head reveal">
+      <p class="sec-label">Data &amp; files</p>
+      <h2>The store is the authority; the file is a projection.</h2>
+      <p class="sec-sub">
+        Collected rows land in an IndexedDB dedup store <b>before</b> any write — an append-only
+        text file cannot merge duplicates, so dedup happens at the source.
+      </p>
+    </div>
+    <div class="split">
+      <div class="box reveal">
+        <h3>Dedup store (<code>state-store</code>)</h3>
+        <ul>
+          <li>Rows keyed <code>[collection, dedupKey]</code>; keys normalize case, punctuation and whitespace — but preserve tech names (<code>C++</code>, <code>C#</code>, <code>.NET</code>, <code>Node.js</code>).</li>
+          <li><b>First row wins</b>; a duplicate's source value is merged into the survivor's <code>sources</code> cell.</li>
+          <li>Counters give <b>O(1)</b> unique-row counts after every page write — no full re-reads mid-run.</li>
+          <li>Writes serialize per collection; NOT-FOUND bookkeeping is one atomic transaction.</li>
+        </ul>
+      </div>
+      <div class="box reveal">
+        <h3>TSV/CSV writer (<code>output-writer</code>)</h3>
+        <ul>
+          <li>Header written exactly once; appends go at end-of-file; cells are sanitized so one bad value can't break alignment.</li>
+          <li>CSV quoting is parsed with the same rules used to write it — <code>"Company, Inc"</code> never misaligns.</li>
+          <li>The file's state is cached and invalidated on size change (external edits, other writers).</li>
+          <li>The file itself is the authority for the running row count — never a number the model holds.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="box reveal" style="margin-top:16px">
+      <h3>One fixed workspace</h3>
+      <p style="color:var(--muted);font-size:14.5px;margin:0 0 8px">
+        Files live in exactly one place, decided once and never silently moved:
+      </p>
+      <ul>
+        <li><b>Embedded storage</b> — IndexedDB-backed, zero setup, never expires. This is the default until you pin a folder.</li>
+        <li><b>A pinned folder</b> — via the File System Access picker; writes go to its <code>data/</code> subfolder. If Chrome drops the grant on restart, Settings offers <b>Reconnect folder</b> — rows are safe in the store either way.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── Runner ── -->
+  <section id="runner">
+    <div class="sec-head reveal">
+      <p class="sec-label">Background plan runner</p>
+      <h2>Set it running; close the panel.</h2>
+      <p class="sec-sub">
+        A service-worker state machine executes collection plans with <b>zero model calls per page</b> —
+        the model is consulted only to synthesize an extractor when a site has none.
+      </p>
+    </div>
+    <div class="states reveal">
+      <span class="state">draft</span><span class="arrow">→</span>
+      <span class="state active">running</span><span class="arrow">→</span>
+      <span class="state">done</span>
+      <span class="arrow">·</span>
+      <span class="state wait">awaiting_human</span><span class="cm" style="color:var(--dim);font-family:var(--mono);font-size:12px">captcha/login — never auto-solved</span>
+      <span class="arrow">·</span>
+      <span class="state wait">paused</span><span class="arrow">·</span>
+      <span class="state err">failed</span>
+    </div>
+    <div class="split">
+      <div class="box reveal">
+        <h3>Resilience</h3>
+        <ul>
+          <li><b>Checkpoint after every page</b> — position and counts persist to IndexedDB; eviction or restart never loses more than the page in flight.</li>
+          <li><b>Watchdog</b> — a 30s <code>chrome.alarms</code> revives the loop if the worker is killed mid-run; <code>onStartup</code> recovers after a browser restart.</li>
+          <li><b>Page budgets</b> — 25s for a normal page, 150s for extractor synthesis (a model call); a page that overruns is skipped and logged, never raced into the next page.</li>
+          <li><b>Politeness</b> — randomized page delay plus a per-host floor so a wide sweep can't burst one site.</li>
+        </ul>
+      </div>
+      <div class="box reveal">
+        <h3>Extractor lifecycle</h3>
+        <ul>
+          <li><b>Synthesize</b> — when a URL pattern has no cached extractor, the runner reads the page (redacted), asks the model for a pure DOM reader, and <b>safety-screens</b> it.</li>
+          <li><b>Validate</b> — every replay is checked: schema fingerprint, required fields, row-count collapse against a trailing average.</li>
+          <li><b>Retire / halt</b> — a failing extractor is retired (history kept); two consecutive failures <b>halt</b> the site; three failed pages abandon the unit — the run itself stays alive.</li>
+          <li><b>Human walls</b> — CAPTCHA or login walls pause the run as <code>awaiting_human</code>; you clear it, then resume from that exact page.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="box reveal" style="margin-top:16px">
+      <h3>ATS adapters</h3>
+      <p style="color:var(--muted);font-size:14.5px;margin:0">
+        <code>ats_fetch</code> pulls entire company boards from <b>Greenhouse</b>, <b>Lever</b>, <b>Ashby</b> and <b>Workable</b> public JSON APIs in one HTTP call. Slug discovery tries likely variants and verifies <b>identity</b>, not just existence: a board that exposes its name must match, an unnamed board is accepted only if non-empty and flagged <code>unverified</code>. All rows normalize to <code>{Title, Company, Location, Posted, URL}</code> and flow through the same dedup store as scraped rows — cross-source dedup is automatic.
+      </p>
     </div>
   </section>
 
@@ -588,29 +672,45 @@
     <div class="sec-head reveal">
       <p class="sec-label">Security model</p>
       <h2>Model-authored code, treated as untrusted.</h2>
-      <p class="sec-sub">Every path where model output becomes a running action is gated.</p>
+      <p class="sec-sub">
+        Every path where model output becomes a running action is gated. The allowlist is the real
+        boundary; the screens make attacks expensive and visible.
+      </p>
     </div>
     <div class="sec-grid">
       <div class="sec-card reveal">
         <h3>Two-layer extractor screen <span class="mark">sandbox</span></h3>
-        <p>Model-written extractors and <code>run_javascript</code> pass a regex denylist <em>and</em>
-          an AST alias-tracking pass (acorn) before running in the page realm — closing
-          <code>window.fetch</code> aliasing, DOM-injection exfiltration and prototype-chain escapes.</p>
+        <p>Extractors and <code>run_javascript</code> are model-written from attacker-controlled page
+          markup, and the CDP path bypasses page CSP on purpose — so the screen is applied twice.</p>
+        <ul class="more">
+          <li><b>Regex denylist</b> — ~30 rules: no network, no <code>eval</code>/<code>Function</code>, no storage, no timers, no <code>postMessage</code>, no DOM insertion, no navigation.</li>
+          <li><b>AST alias tracking</b> (acorn) — closes what regex can't see: <code>var w = window; w.fetch()</code>, destructuring, IIFE parameters, <code>Reflect.get</code>, descriptor retrieval, enumeration of a tracked global.</li>
+        </ul>
       </div>
       <div class="sec-card reveal">
         <h3>Sensitive-value redaction <span class="mark">privacy</span></h3>
-        <p>Password, OTP, card and pin fields are caught by type, autocomplete token, name and id —
-          and redacted before upload. <code>type=file</code> local paths never surface.</p>
+        <p>Anything the agent reads can reach the model, so sensitive values never leave the page.</p>
+        <ul class="more">
+          <li>Fields caught by <b>type</b>, <b>autocomplete token</b> (<code>cc-number</code>, <code>one-time-code</code>…), and <b>name/id</b> (<code>cvv</code>, <code>otp</code>, <code>secret</code>…).</li>
+          <li>Raw markup sent to extractor synthesis is redacted too — inputs, textarea bodies, and unterminated tags can't smuggle a value through.</li>
+          <li><code>type=file</code> local paths never surface.</li>
+        </ul>
       </div>
       <div class="sec-card reveal">
         <h3>Site allowlist <span class="mark">control</span></h3>
-        <p>Page-changing tools are gated by an approved-sites list that fails closed when empty.
-          Allow-all is an explicit opt-in for fresh installs; a redirect off-list stops the run.</p>
+        <p>Page-changing tools (and extractor code) are gated by an approved-sites list that <b>fails closed</b> when empty. Allow-all is an explicit opt-in for fresh installs.</p>
+        <ul class="more">
+          <li>Scheme is checked before allow-all — <code>chrome://</code>, <code>file://</code> and <code>data:</code> are never "all sites".</li>
+          <li>Redirects off-list stop the run at the first page; the runner re-checks the origin it actually landed on.</li>
+        </ul>
       </div>
       <div class="sec-card reveal">
         <h3>Guarded regexes <span class="mark">hardening</span></h3>
-        <p>Every model-authored pattern is analyzed with safe-regex before compile, so a single
-          catastrophic-backtracking pattern can never hang the extension.</p>
+        <p>Every model-authored pattern is analyzed with <code>safe-regex</code> before compile.</p>
+        <ul class="more">
+          <li>A nested-quantifier pattern can hang V8's regex engine, so a catastrophic-backtracking shape is refused with a clear message.</li>
+          <li>Length-capped and fail-closed: a broken safety analysis rejects, it never silently passes.</li>
+        </ul>
       </div>
     </div>
   </section>
@@ -637,6 +737,33 @@
       <div class="number reveal">
         <div class="v">1</div>
         <div class="l">workspace, one location<br>disk folder or embedded</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Develop ── -->
+  <section id="develop">
+    <div class="sec-head reveal">
+      <p class="sec-label">Develop</p>
+      <h2>Built with Vite, tested offline.</h2>
+    </div>
+    <div class="dev">
+      <div class="reveal">
+        <pre class="devpre"><span class="p">$</span> npm run dev          <span class="c"># vite dev server</span>
+<span class="p">$</span> npm run build        <span class="c"># production build → dist/</span>
+<span class="p">$</span> npm test             <span class="ok"># 677 offline unit tests</span>
+<span class="p">$</span> npm run test:live    <span class="c"># + live ATS checks (needs network)</span>
+<span class="p">$</span> npm run lint         <span class="c"># eslint</span>
+<span class="p">$</span> npm run check        <span class="c"># lint + test + build</span></pre>
+      </div>
+      <div class="box reveal">
+        <h3>Testing strategy</h3>
+        <ul>
+          <li>The suite splits <b>offline vs live</b>: CI runs the deterministic offline tests only, so logic regressions can't merge green.</li>
+          <li>Security-critical modules (<code>extractor-screen</code>, <code>redaction</code>, <code>allowlist</code>, <code>regex-guard</code>) are asserted as pure functions.</li>
+          <li>The plan runner's state machine (<code>decideUnitProgress</code>, <code>reconcileCheckpoint</code>) is tested as pure logic — no browser needed.</li>
+          <li>CDP extractor expression correctness is proven by evaluating it under Node with a stubbed DOM.</li>
+        </ul>
       </div>
     </div>
   </section>
