@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="bat">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAT</title>
+  <style>
+    /* Every colour is a token defined here, on bare :root, so the light theme is
+       complete on its own. The dark block below only REDEFINES tokens — no rule
+       anywhere gets its sole definition inside a media query, which is what
+       makes a panel render half-styled when the system theme flips. */
+    :root {
+      --primary: #d97757;
+      --primary-hover: #c45c3e;
+      --bg: #ffffff;
+      --surface: #ffffff;
+      --surface-alt: #fafafa;
+      --surface-sunken: #f1f1f1;
+      --border: #e5e5e5;
+      --text: #1f1f1f;
+      --muted: #6b7280;
+      --input-bg: #f8f8f8;
+      --hover: #f5f5f5;
+      --detail-text: #4b5563;
+      --ok-bg: #f0fdf4;
+      --ok-border: #bbf7d0;
+      --ok-text: #16a34a;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --err-bg: #fef2f2;
+      --err-border: #fecaca;
+      --err-text: #b91c1c;
+      --step-bg: #111111;
+      --step-text: #ffffff;
+      --shadow: 0 2px 10px rgba(0, 0, 0, .12);
+    }
+    /* Chrome's side panel inherits the browser theme; a hardcoded white panel
+       inside a dark window was the single loudest "messy" complaint. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1c;
+        --surface: #242424;
+        --surface-alt: #202020;
+        --surface-sunken: #2b2b2b;
+        --border: #3a3a3a;
+        --text: #ececec;
+        --muted: #9ca3af;
+        --input-bg: #2b2b2b;
+        --hover: #303030;
+        --detail-text: #c2c7d0;
+        --ok-bg: #10291a;
+        --ok-border: #1f5133;
+        --ok-text: #4ade80;
+        --warn-bg: #2e2413;
+        --warn-border: #6b5220;
+        --warn-text: #fbbf24;
+        --err-bg: #2e1717;
+        --err-border: #6b2b2b;
+        --err-text: #f87171;
+        --step-bg: #ececec;
+        --step-text: #1c1c1c;
+        --shadow: 0 2px 10px rgba(0, 0, 0, .5);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0; padding: 0;
+      width: 100%;
+      /* dvh, not vh: the side panel's viewport changes height when Chrome's own
+         chrome shows/hides, and vh left the composer clipped below the fold. */
+      height: 100dvh;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+      color: var(--text);
+      overflow: hidden;
+      /* Scopes .datapanel's `position:absolute; inset:0` to the panel instead of
+         letting it resolve against the initial containing block. */
+      position: relative;
+    }
+
+    /* Header — kept ABOVE the settings overlay (which covers the whole panel)
+       so the gear button that closes Settings is always reachable. Without the
+       z-index the opaque settings screen sat on top of the header and the panel
+       was a one-way trap: a fresh install auto-opens settings, and the user had
+       no way back to the chat except reloading the extension. */
+    .header {
+      position: relative;
+      z-index: 20;
+      padding: 12px 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #111111;
+      flex-shrink: 0;
+    }
+    .header h1 { 
+      margin: 0; 
+      font-size: 15px; 
+      font-weight: 600; 
+      letter-spacing: -.01em;
+    }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .btn-ghost {
+      background: none; border: 1px solid var(--border);
+      color: var(--muted); font-size: 12px;
+      padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-ghost:hover { background: var(--hover); }
+    .btn-ghost[hidden] { display: none; }
+    .row-counter {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text);
+      background: var(--ok-bg);
+      border: 1px solid var(--ok-border);
+      border-radius: 999px;
+      padding: 3px 10px;
+      white-space: nowrap;
+    }
+    .row-counter[hidden] { display: none; }
+    #settingsBtn { font-size: 14px; padding: 4px 9px; }
+    #settingsBtn[aria-expanded="true"] { background: var(--hover); color: var(--text); }
+    /* Settings panel — a full-view toggle, not a dropdown. It REPLACES the chat
+       interface while open (the chat, status line and composer are hidden), so
+       the panel reads as two screens rather than a chat squeezed around a
+       settings strip. */
+    .settings {
+      position: absolute; inset: 0; z-index: 10;
+      background: var(--bg);
+      /* Header is z-index 20 above this overlay, so content must start below it. */
+      padding: 64px 16px 24px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+    }
+    body.show-settings .settings { display: flex; }
+    body.show-settings .chat-wrap,
+    body.show-settings .live-status,
+    body.show-settings .input-area { display: none; }
+    .settings-close-row {
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .settings-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .settings-label {
+      font-weight: 600; color: var(--muted);
+      font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+      margin-top: 4px;
+    }
+    .settings-row { display: flex; gap: 6px; align-items: center; }
+    .settings input, .settings textarea {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      background: var(--bg);
+      color: var(--text);
+      resize: vertical;
+      outline: none;
+      min-width: 0;
+    }
+    .settings-status { font-size: 11px; color: var(--muted); }
+    .settings-status.ok { color: var(--ok-text); }
+    .settings-status.warn { color: var(--warn-text); }
+    .settings-status.err { color: var(--err-text); font-weight: 500; }
+    .settings-checkbox {
+      display: flex; align-items: flex-start; gap: 6px;
+      font-size: 11px; color: var(--muted); line-height: 1.4;
+    }
+    .settings-checkbox input { flex: 0 0 auto; margin-top: 1px; }
+    .settings-hint {
+      font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: -2px;
+    }
+    .settings-hint code {
+      background: var(--surface-sunken); border-radius: 4px; padding: 1px 4px; font-size: 11px;
+    }
+
+    /* Stored-data manager — the agent accumulates IndexedDB state (collections,
+       cached extractors, runs) that used to be invisible and undeletable. */
+    .datapanel {
+      position: absolute; inset: 0; z-index: 20;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+    }
+    .datapanel[hidden] { display: none; }
+    .datapanel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .datapanel-body {
+      flex: 1; min-height: 0;
+      overflow-y: auto; overscroll-behavior: contain;
+      padding: 12px 16px; font-size: 12px;
+    }
+    .data-section { margin-bottom: 18px; }
+    .data-section > h3 {
+      margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .data-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .data-row:last-child { border-bottom: none; }
+    .data-main { flex: 1; min-width: 0; }
+    .data-name {
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      word-break: break-all;
+    }
+    .data-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .data-empty { color: var(--muted); font-style: italic; }
+    .btn-mini {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-mini:hover { background: var(--hover); }
+    .btn-mini.danger { color: var(--err-text); border-color: var(--err-border); }
+    .btn-mini.danger:hover { background: var(--err-bg); }
+    .data-src {
+      margin-top: 6px; padding: 6px 8px; background: var(--surface-alt);
+      border: 1px solid var(--border); border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+      white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto;
+    }
+    .btn-allow {
+      background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
+      font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-weight: 500;
+    }
+    .btn-allow:hover { filter: brightness(0.97); }
+    .btn-allow[hidden] { display: none; }
+
+    /* Chat area */
+    /* The wrapper exists so "Jump to latest" can be positioned over the scroller
+       without living inside it (where it would scroll away with the content). */
+    .chat-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;   /* lets the scroller actually shrink inside the flex column */
+      display: flex;
+    }
+    .chat {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      /* Keeps a flick at the end of the chat from scrolling the whole panel
+         behind it — noticeable on trackpads and the usual cause of the view
+         "jumping" while reading. */
+      overscroll-behavior: contain;
+      padding: 20px 16px 12px;
+      background: var(--bg);
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .jump-latest {
+      position: absolute;
+      bottom: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 5;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .jump-latest[hidden] { display: none; }
+    .jump-latest:hover { background: var(--hover); }
+    .message {
+      max-width: 85%; padding: 10px 14px;
+      border-radius: 16px;
+      line-height: 1.5; white-space: pre-wrap;
+      /* `anywhere` rather than `break-word`: an unbroken 200-char URL (exactly
+         what the agent collects) still overflowed the bubble and forced the
+         whole panel to scroll sideways. */
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      position: relative;
+    }
+    .message.user {
+      align-self: flex-end;
+      background: var(--primary);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .message.assistant {
+      align-self: flex-start;
+      background: var(--surface-sunken);
+      border: none;
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+    }
+    .message.system {
+      align-self: center;
+      background: var(--surface-sunken);
+      color: var(--muted);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      max-width: 80%;
+      text-align: center;
+    }
+
+    /* Agent activity log — step feed */
+    .message.activity {
+      align-self: stretch;
+      max-width: 100%;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .message.activity.error { border-color: var(--err-border); background: var(--err-bg); }
+    .message.activity.success { border-color: var(--ok-border); background: var(--ok-bg); }
+    .message.activity.warn { border-color: var(--warn-border); background: var(--warn-bg); }
+    .activity-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .activity-step {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--step-bg); color: var(--step-text);
+      font-size: 11px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .activity-phase {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .activity-title { font-weight: 600; color: var(--text); flex: 1; }
+    .activity-detail {
+      color: var(--detail-text);
+      font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 4px;
+      padding-left: 30px;
+    }
+    .activity-detail.collapsed {
+      max-height: 4.5em;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+      mask-image: linear-gradient(180deg, #000 60%, transparent);
+    }
+    .activity-expand {
+      margin-top: 4px; padding-left: 30px;
+      font-size: 11px; color: var(--muted);
+      background: none; border: none; cursor: pointer;
+      text-decoration: underline;
+    }
+    .file-attachment {
+      border: 1px solid var(--ok-border);
+      background: var(--ok-bg);
+    }
+    .file-download {
+      flex-shrink: 0;
+      font-size: 12px; font-weight: 600;
+      background: var(--ok-text); color: #fff;
+      border: none; border-radius: 6px; padding: 4px 12px; cursor: pointer;
+    }
+    .file-download:hover { filter: brightness(1.08); }
+
+    /* Live status — one small minimal line that UPDATES in place while the
+       agent works: a compact ring spinner + a short phase word ("Thinking…",
+       "Working…", "Finishing…"). The old version appended a new chat block per
+       tool call and streamed the model's full output into the conversation;
+       now the chat only ever shows final answers and real milestones, and the
+       ring + one line is the entire "what is it doing" surface. */
+    .live-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      min-height: 26px;
+    }
+    .live-status[hidden] { display: none; }
+    .live-ring {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      flex-shrink: 0;
+      animation: ring-spin 0.8s linear infinite;
+    }
+    .live-status.error .live-ring {
+      border-top-color: var(--err-text);
+    }
+    .live-status.done .live-ring {
+      border-top-color: var(--ok-text);
+      animation: none;
+    }
+    .live-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    @keyframes ring-spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .live-ring { animation-duration: 2.4s; }
+    }
+
+    /* Input area */
+    .input-area {
+      flex-shrink: 0;
+      padding: 12px 12px 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .input-wrapper {
+      display: flex;
+      align-items: flex-end;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 6px 8px 6px 16px;
+      min-height: 44px;
+    }
+    .input-area textarea {
+      flex: 1;
+      min-height: 36px;
+      max-height: 180px;
+      padding: 6px 0;
+      border: none;
+      background: transparent;
+      resize: none;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.4;
+      outline: none;
+      color: var(--text);
+    }
+    /* Collapses to zero height when neither child is showing, so the composer
+       sits directly on the panel edge instead of above an empty strip. */
+    .input-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .input-row:has(> :not([hidden]):not(.btn-stop)),
+    .input-row:has(> .btn-stop.visible) {
+      margin-top: 8px;
+    }
+    .btn-send {
+      width: 32px;
+      height: 32px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.1s ease;
+    }
+    .btn-send:hover { background: var(--primary-hover); }
+    .btn-send:disabled { 
+      background: var(--border);
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+    .btn-stop {
+      padding: 6px 14px;
+      background: #dc2626;
+      color: white;
+      border: none;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-stop.visible {
+      display: inline-flex;
+    }
+    .btn-stop:hover {
+      background: #b91c1c;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-left">
+      <img class="header-logo" src="/bat-icon.svg" alt="" width="28" height="28">
+      <h1>BAT</h1>
+    </div>
+    <div class="header-right">
+      <span class="row-counter" id="rowCounter" hidden></span>
+      <button class="btn-ghost" id="settingsBtn" title="Settings" aria-expanded="false">⚙</button>
+    </div>
+  </div>
+
+  <!-- Everything that isn't the conversation lives behind the gear, which now
+       swaps the WHOLE view: Settings replaces the chat while open. -->
+  <div class="settings" id="settingsPanel">
+    <div class="settings-row settings-close-row">
+      <strong class="settings-title">Settings</strong>
+      <button class="btn-ghost" id="settingsCloseBtn" title="Back to chat">← Back to chat</button>
+    </div>
+    <label class="settings-label" for="keyInput">DeepSeek API key</label>
+    <div class="settings-row">
+      <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off">
+      <button class="btn-ghost" id="saveKeyBtn">Save</button>
+    </div>
+    <div class="settings-status" id="keyStatus"></div>
+
+    <!-- No model picker. This was a <select> whose <option> list was hardcoded
+         here, so it drifted from the ids the code treated as valid and went on
+         offering the retired `deepseek-chat`; nothing validated the choice on
+         save, so one click could pin the install to a model the API refuses.
+         BAT now runs on exactly one model (MODEL in src/shared/constants.js). -->
+
+    <label class="settings-label">Site access for page actions</label>
+    <div class="settings-status" id="sitesStatus"></div>
+    <div class="settings-hint">
+      Unrestricted by default so the agent can work anywhere. Turn this off to
+      restrict page-changing tools to only the sites you approve.
+    </div>
+    <label class="settings-checkbox">
+      <input type="checkbox" id="allowAllToggle">
+      <span>Allow <strong>all</strong> sites (unrestricted)</span>
+    </label>
+
+    <label class="settings-label">Workspace — where files go</label>
+    <div class="settings-status" id="workspaceStatus"></div>
+    <div class="settings-row">
+      <button class="btn-ghost" id="workspaceBtn">Choose folder</button>
+      <button class="btn-ghost" id="workspaceReconnectBtn" hidden>Reconnect folder</button>
+      <button class="btn-ghost" id="workspaceEmbeddedBtn" hidden>Use embedded storage</button>
+    </div>
+    <div class="settings-hint">
+      Files live inside the extension unless you pick a folder. Chrome drops a
+      folder's permission on restart — press "Reconnect folder" and anything
+      collected meanwhile is written out automatically. Rows are never lost.
+    </div>
+
+    <label class="settings-label">Stored data</label>
+    <div class="settings-row">
+      <button class="btn-ghost" id="dataBtn">Manage stored data</button>
+      <span class="settings-status" id="dataStatus"></span>
+    </div>
+
+    <label class="settings-label">Conversation</label>
+    <div class="settings-row">
+      <button class="btn-ghost" id="clearChatBtn" title="Clear conversation">Clear chat</button>
+      <button class="btn-ghost" id="copyDebugBtn" title="Copy full debug log for troubleshooting">Copy debug log</button>
+    </div>
+    <div class="settings-status" id="debugStatus">Debug: 0 events</div>
+  </div>
+
+  <div class="datapanel" id="dataPanel" hidden>
+    <div class="datapanel-head">
+      <strong>Stored data</strong>
+      <button class="btn-ghost" id="dataCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="datapanel-body" id="dataBody"></div>
+  </div>
+
+  <div class="chat-wrap">
+    <div class="chat" id="chat" role="log" aria-live="polite"></div>
+    <!-- Only shown once the reader has scrolled away from the bottom; the chat
+         no longer drags them back down on every appended line. -->
+    <button class="jump-latest" id="jumpLatestBtn" hidden>↓ Jump to latest</button>
+  </div>
+
+  <div class="live-status" id="liveStatus" hidden>
+    <span class="live-ring" id="liveRing" aria-hidden="true"></span>
+    <span class="live-text" id="liveStatusText"></span>
+  </div>
+
+  <div class="input-area">
+    <div class="input-wrapper">
+      <textarea id="promptInput" placeholder="Message..." rows="1"></textarea>
+      <button class="btn-send" id="sendBtn" title="Send">↑</button>
+    </div>
+    <!-- Only shown when there is something to say: the Allow button appears on
+         an unapproved site, Stop only while the agent is running. An empty row
+         collapses to nothing rather than reserving a permanent strip. -->
+    <div class="input-row">
+      <button class="btn-allow" id="allowCurrentBtn" hidden>Allow this site</button>
+      <button class="btn-stop" id="stopBtn" title="Stop">■ Stop</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

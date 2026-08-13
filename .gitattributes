@@ -1,0 +1,10 @@
+# Normalize text files to LF in the repository (working copies on Windows
+# occasionally get CRLF endings from editors/tools).
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.svg binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

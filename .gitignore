@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.crx
+*.pem
+*.zip
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+.env.local
+
+# Suggested default BAT workspace folder (Settings -> Workspace folder). Collected
+# data belongs here, not in the repo — keep everything except the explainer and the
+# change log out of git. The data/ subfolder holds agent output.
+workspace/*
+!workspace/README.md
+!workspace/CHANGELOG.md
+workspace/data/
